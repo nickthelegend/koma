@@ -1,0 +1,7 @@
+out/
+cache/
+broadcast/*/31337/
+
+# Deploy records from local forks and other chains (421614 here was never the public testnet)
+broadcast/*/421614/
+broadcast/*/10143/

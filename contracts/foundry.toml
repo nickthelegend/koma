@@ -1,0 +1,38 @@
+[profile.default]
+src = "src"
+out = "out"
+test = "test"
+script = "script"
+libs = ["../node_modules"]
+auto_detect_remappings = false
+remappings = [
+  "@openzeppelin/=../node_modules/@openzeppelin/",
+  "forge-std/=lib/forge-std/src/",
+  "@uniswap/v4-core/=../node_modules/@uniswap/v4-core/",
+  "@uniswap/v4-periphery/=../node_modules/@uniswap/v4-periphery/",
+  "permit2/=../node_modules/@uniswap/v4-periphery/lib/permit2/",
+]
+solc_version = "0.8.28"
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 500
+# Prebuilt Uniswap v4 artifacts (PoolManager is pinned to solc 0.8.26) are loaded with vm.deployCode in
+# unit tests; the deploy script writes deploy/addresses.<chainId>.json in the koma root.
+fs_permissions = [
+  { access = "read", path = "../node_modules/@uniswap" },
+  { access = "read-write", path = "../deploy" },
+  { access = "read-write", path = "../.data" },
+]
+
+# Deadlines, the snipe window and canon voting windows are timestamp-based by design.
+[lint]
+exclude_lints = ["block-timestamp"]
+ignore = ["test/**/*.sol", "script/**/*.sol"]
+
+[fuzz]
+runs = 512
+
+[rpc_endpoints]
+arbitrum_sepolia = "https://sepolia-rollup.arbitrum.io/rpc"
+arbitrum_sepolia_archive = "https://arbitrum-sepolia.gateway.tenderly.co"
+arbitrum = "https://arb1.arbitrum.io/rpc"
