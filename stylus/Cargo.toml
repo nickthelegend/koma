@@ -1,0 +1,20 @@
+[workspace]
+resolver = "3"
+members = ["curve-math", "royalty-router"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[workspace.dependencies]
+alloy-primitives = { version = "1.5.7", default-features = false }
+alloy-sol-types = { version = "1.5.7", default-features = false }
+stylus-sdk = "0.10.9"
+
+[profile.release]
+codegen-units = 1
+strip = true
+lto = true
+panic = "abort"
+opt-level = 3

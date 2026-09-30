@@ -1,0 +1,106 @@
+{
+  "cache": "stylus_cached = after ArbWasmCache.cacheProgram (codehashIsCached == true)",
+  "node": "offchainlabs/nitro-node:v3.7.1-926f1ab --dev (L1 price 0)",
+  "rpc": "http://127.0.0.1:8649",
+  "method": "eth_estimateGas (total tx gas incl. 21000 intrinsic + calldata) unless noted",
+  "bench": "stylus/bench/CurveBench.sol run(math, n): n x (quoteBuy + quoteSell) external calls",
+  "solidity": "contracts/src/CurveMathReference.sol / RoyaltyRouterReference.sol, solc 0.8.28 --optimize-runs 500 --evm-version cancun",
+  "curveMath": {
+    "stylus_uncached": {
+      "benchLoop": {
+        "0": {
+          "estimateGas": 24457,
+          "result": 0
+        },
+        "1": {
+          "estimateGas": 79072,
+          "result": 500249
+        },
+        "10": {
+          "estimateGas": 366976,
+          "result": 7255414
+        },
+        "100": {
+          "estimateGas": 3237195,
+          "result": 298318162
+        }
+      },
+      "directTx": {
+        "quoteBuy(1e9,1e27,1e6)": 39327,
+        "quoteSell(1e9+1e6,~1e27,1e21)": 39428
+      }
+    },
+    "solidity": {
+      "benchLoop": {
+        "0": {
+          "estimateGas": 24469,
+          "result": 0
+        },
+        "1": {
+          "estimateGas": 50172,
+          "result": 500249
+        },
+        "10": {
+          "estimateGas": 79795,
+          "result": 7255414
+        },
+        "100": {
+          "estimateGas": 374236,
+          "result": 298318162
+        }
+      },
+      "directTx": {
+        "quoteBuy(1e9,1e27,1e6)": 22940,
+        "quoteSell(1e9+1e6,~1e27,1e21)": 22970
+      }
+    },
+    "stylus_cached": {
+      "benchLoop": {
+        "0": {
+          "estimateGas": 24457,
+          "result": 0
+        },
+        "1": {
+          "estimateGas": 52267,
+          "result": 500249
+        },
+        "10": {
+          "estimateGas": 100847,
+          "result": 7255414
+        },
+        "100": {
+          "estimateGas": 585717,
+          "result": 298318162
+        }
+      },
+      "directTx": {
+        "quoteBuy(1e9,1e27,1e6)": 25992,
+        "quoteSell(1e9+1e6,~1e27,1e21)": 26093
+      }
+    }
+  },
+  "royaltyRouter": {
+    "stylus_uncached": {
+      "route(4,1e6) depth3 5 transfers": {
+        "firstRoute_estimateGas(cold recipients)": 321749,
+        "firstRoute_gasUsed": 318057,
+        "secondRoute_gasUsed(warm recipients)": 147057
+      }
+    },
+    "solidity": {
+      "route(4,1e6) depth3 5 transfers": {
+        "firstRoute_estimateGas(cold recipients)": 307469,
+        "firstRoute_gasUsed": 303890,
+        "secondRoute_gasUsed(warm recipients)": 132890,
+        "thirdRoute_estimateGas(warm recipients)": 134000,
+        "thirdRoute_gasUsed(warm recipients)": 132890
+      }
+    },
+    "stylus_cached": {
+      "route(4,1e6) depth3 5 transfers": {
+        "thirdRoute_estimateGas(warm recipients)": 135122,
+        "thirdRoute_gasUsed(warm recipients)": 131802
+      }
+    }
+  }
+}

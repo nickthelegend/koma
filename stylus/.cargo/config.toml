@@ -1,0 +1,7 @@
+# Stylus charges for every WASM memory page a call opens (only 2 are free).
+# rustc's default 1 MiB shadow stack makes the module start with 17 pages,
+# which cost ~15k gas on *every* call. A 64 KiB stack is plenty for these
+# contracts (all on-chain vector + router tests pass) and cut a cached
+# quoteBuy tx from 41,285 to 25,992 gas on the devnode.
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "link-arg=-zstack-size=65536"]
