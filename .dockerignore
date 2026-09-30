@@ -1,0 +1,13 @@
+node_modules
+.next
+.data
+.env*
+contracts/out
+contracts/cache
+contracts/lib
+contracts/broadcast
+*.tsbuildinfo
+.git
+stylus/target
+stylus/**/target
+stylus/.devnode

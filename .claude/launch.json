@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "koma", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev", "--", "-p", "4310"], "port": 4310 }
+  ]
+}
