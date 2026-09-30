@@ -39,3 +39,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# issues, jobs, generated art
+/.data
+!.env.example
+
+# stylus (Rust -> WASM) build output and local nitro devnode checkout
+stylus/.devnode/
+stylus/**/target/
