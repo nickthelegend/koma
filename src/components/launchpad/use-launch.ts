@@ -6,7 +6,7 @@ import { x402Client } from "@x402/core/client";
 import { x402HTTPClient } from "@x402/core/http";
 import type { PaymentRequired } from "@x402/core/types";
 import { ExactEvmScheme } from "@x402/evm/exact/client";
-import { KOMA, USDC_DECIMALS } from "@/lib/network";
+import { KOMA, USDC_DECIMALS, LAUNCH_PRICE } from "@/lib/network";
 import type { LaunchJob, LaunchStage } from "@/lib/launchpad/types";
 import type { Quote } from "../studio/use-generation";
 import { useWallet, walletErrorMessage } from "../wallet";
@@ -117,7 +117,7 @@ export function useLaunch() {
       http = new x402HTTPClient(
         x402Client.fromConfig({
           schemes: [{ network: KOMA.caip, client: new ExactEvmScheme(signer) }],
-          spendControls: { allowedAssets: [{ network: KOMA.caip, asset: KOMA.usdc, maxAmountPerPayment: "100000" }] },
+          spendControls: { allowedAssets: [{ network: KOMA.caip, asset: KOMA.usdc, maxAmountPerPayment: String(Math.round(LAUNCH_PRICE * 1e6)) }] },
         }),
       );
       header = http.encodePaymentSignatureHeader(await http.createPaymentPayload(p.required));

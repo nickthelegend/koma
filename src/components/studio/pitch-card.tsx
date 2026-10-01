@@ -59,7 +59,7 @@ export function PitchCard({
                 role="radio"
                 aria-checked={on}
                 disabled={locked || busy}
-                onClick={() => onChange({ ...pitch, pages: n, price: priceFor(n) })}
+                onClick={() => onChange({ ...pitch, pages: n, price: priceFor(n, Boolean(pitch.seriesId)) })}
                 className={`border-l border-rule py-2 first:border-l-0 disabled:cursor-default ${on ? "bg-paper text-ink" : "text-soft hover:bg-stock-2"}`}
               >
                 <span className="block font-display text-[20px] leading-none">{n}</span>

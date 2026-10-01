@@ -4,21 +4,22 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useId, useState } from "react";
 import { GENRES } from "@/lib/studio-config";
-import { KOMA } from "@/lib/network";
+import { FEE_SPLIT, GRADUATION_FEE_PCT, KOMA, LAUNCH_PRICE, TRADE_FEE_PCT } from "@/lib/network";
 import { txUrl } from "@/lib/explorer";
-import { coinPrice, short } from "@/lib/format";
+import { short } from "@/lib/format";
+import { CANON_THRESHOLD, DEMO_TARGET_USDC, GRADUATION_TARGET_USDC, START_PRICE_USDC, TOTAL_SUPPLY } from "@/lib/launchpad/abi";
+import type { SeriesSummary } from "@/lib/launchpad/types";
 import type { Genre } from "@/lib/types";
 import { PaySheet } from "../studio/pay-sheet";
 import { ArbMark, IconCheck, IconPlus, IconRemix } from "../icons";
-import { DemoBadge, RaisedBar, Sheet } from "./sheet";
+import { SeriesCard } from "./series-card";
+import { COIN_DISCLAIMER, MAINNET } from "./network-note";
 import { useLaunch, type LaunchRequest, type LaunchState } from "./use-launch";
+import { AI_DOWN_NOTE } from "../use-server-status";
 
 export type ParentSeries = { id: number; name: string; symbol: string; characterName: string };
 
 const LAUNCH_COPY = { noun: "launch", after: "the character sheet is drawn once it lands", back: "Back to the form" };
-const MAINNET = KOMA.key === "arbitrum-one";
-// The curve opens with 1,000 virtual USDC against 1B virtual coins.
-const START_PRICE = 1_000 / 1_000_000_000;
 
 type Draft = { name: string; symbol: string; characterName: string; characterPrompt: string; pitch: string; genre: Genre | ""; demo: boolean };
 
@@ -50,20 +51,22 @@ function Field({ id, label, hint, error, children }: { id: string; label: string
 }
 
 /** Launch a series: a character, a pitch and a ticker; KOMA draws the sheet and launches everything in one transaction. */
-export function LaunchStudio({ deployed, parent, job }: { deployed: boolean; parent: ParentSeries | null; job?: string }) {
+export function LaunchStudio({ deployed, parent, job, arbitrum }: { deployed: boolean; parent: ParentSeries | null; job?: string; arbitrum?: React.ReactNode }) {
   const ids = useId();
   const [d, setD] = useState<Draft>({ name: "", symbol: "", characterName: "", characterPrompt: "", pitch: "", genre: "", demo: !MAINNET });
   const [tried, setTried] = useState(false);
   const [offline, setOffline] = useState<string | null>(null);
+  const [aiDown, setAiDown] = useState(false);
   const { state, requestQuote, pay, cancel, resume } = useLaunch();
 
   useEffect(() => {
     if (job) resume(job);
     fetch("/api/status")
       .then((r) => r.json())
-      .then((s: { ready: boolean; missing: string[]; launchpad: unknown }) =>
-        setOffline(!s.launchpad ? "launchpad" : s.ready ? null : s.missing.join(", ")),
-      )
+      .then((s: { ready: boolean; missing: string[]; launchpad: unknown; ai?: { ok: boolean } }) => {
+        setOffline(!s.launchpad ? "launchpad" : s.ready ? null : s.missing.join(", "));
+        setAiDown(s.ready && s.ai?.ok === false);
+      })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -72,7 +75,7 @@ export function LaunchStudio({ deployed, parent, job }: { deployed: boolean; par
   const valid = Object.keys(errs).length === 0;
   const show = (k: keyof Draft) => (tried || d[k] !== "") && errs[k] ? errs[k] : undefined;
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((x) => ({ ...x, [k]: v }));
-  const target = d.demo ? 25 : 5_000;
+  const target = d.demo ? DEMO_TARGET_USDC : GRADUATION_TARGET_USDC;
 
   if (!["idle", "quoting", "quote", "signing"].includes(state.stage)) {
     return <LaunchProgress state={state} onReset={cancel} />;
@@ -91,17 +94,42 @@ export function LaunchStudio({ deployed, parent, job }: { deployed: boolean; par
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     setTried(true);
-    if (valid && !offline && deployed) void requestQuote(request());
+    if (valid && !offline && !aiDown && deployed) void requestQuote(request());
   };
   const down = !deployed || offline === "launchpad";
+  const zero = "0x0000000000000000000000000000000000000000" as const;
+  const preview: SeriesSummary = {
+    id: 0,
+    name: d.name.trim() || "Series name",
+    symbol: d.symbol || "TICKER",
+    characterName: d.characterName.trim() || "Your character",
+    sheetUrl: "",
+    coin: zero,
+    curve: zero,
+    characterId: 0,
+    characterAccount: zero,
+    creator: zero,
+    parentSeriesId: parent?.id ?? 0,
+    priceUsdc: START_PRICE_USDC,
+    marketCapUsdc: START_PRICE_USDC * TOTAL_SUPPLY,
+    raisedUsdc: 0,
+    targetUsdc: target,
+    complete: false,
+    graduated: false,
+    demo: d.demo,
+    holders: 0,
+    episodes: 0,
+    launchedAt: 0,
+    lastTradeAt: null,
+  };
 
   return (
     <>
-      <div className="mx-auto grid max-w-[1320px] gap-10 px-4 pb-16 pt-6 md:grid-cols-[minmax(0,1fr)_400px] md:gap-14 md:px-8 md:pt-10">
+      <div className="mx-auto grid max-w-[1320px] gap-10 px-4 pb-14 pt-6 md:grid-cols-[minmax(0,1fr)_400px] md:gap-14 md:px-8 md:pt-10">
         <div className="min-w-0">
           <h1 className="masthead text-[23vw] text-kapow md:text-[clamp(120px,12vw,172px)]">Launch</h1>
           <p className="mt-4 max-w-[56ch] text-[15px] leading-relaxed text-soft">
-            Start a series: a character people can follow from episode to episode. For $0.10 in USDC, KOMA draws the character sheet
+            Start a series: a character people can follow from episode to episode. For ${LAUNCH_PRICE} in USDC, KOMA draws the character sheet
             and launches everything on {KOMA.label} in one transaction.
           </p>
 
@@ -110,6 +138,10 @@ export function LaunchStudio({ deployed, parent, job }: { deployed: boolean; par
               <span className="font-semibold text-paper">The launchpad is offline.</span> Its contracts aren&rsquo;t deployed on{" "}
               {KOMA.label} yet, so series can&rsquo;t be launched here. You can still read the form and make comics in the{" "}
               <Link href="/create" className="text-paper underline underline-offset-4">studio</Link>.
+            </p>
+          ) : aiDown ? (
+            <p role="status" className="mt-6 border border-kapow/60 bg-kapow/10 px-4 py-3 text-[13.5px] leading-relaxed text-soft">
+              {AI_DOWN_NOTE}
             </p>
           ) : (
             offline && (
@@ -203,10 +235,10 @@ export function LaunchStudio({ deployed, parent, job }: { deployed: boolean; par
               <label htmlFor={`${ids}-demo`} className="flex cursor-pointer items-start gap-3 border border-rule bg-stock p-3.5">
                 <input id={`${ids}-demo`} type="checkbox" checked={d.demo} onChange={(e) => set("demo", e.target.checked)} className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--kapow)]" />
                 <span className="text-[13.5px] leading-snug">
-                  <span className="font-semibold text-paper">Demo series (graduates at 25 USDC, 5-minute canon votes)</span>
+                  <span className="font-semibold text-paper">Demo series (graduates at {DEMO_TARGET_USDC} USDC, 5-minute canon votes)</span>
                   <span className="mt-1 block text-[12.5px] text-mute">
-                    So a whole run, from launch to canon to a Uniswap v4 pool, fits in an afternoon with test USDC. A normal series graduates at
-                    5,000 USDC and votes run for 24 hours.
+                    So a whole run, from launch to canon to a Uniswap v4 pool, fits in an afternoon with test USDC. A normal series graduates at{" "}
+                    {GRADUATION_TARGET_USDC.toLocaleString("en-US")} USDC and votes run for 24 hours. Only on {KOMA.label}; Arbitrum One has no demo series.
                   </span>
                 </span>
               </label>
@@ -219,11 +251,11 @@ export function LaunchStudio({ deployed, parent, job }: { deployed: boolean; par
               </h2>
               <ul className="mt-3 flex flex-col gap-2">
                 {[
-                  ["Character NFT, minted to you", "with its own wallet (ERC-6551). The character earns: half of every trading fee lands in that wallet."],
-                  [`1,000,000,000 $${d.symbol || "COIN"}`, "95% on a USDC bonding curve (the price rises as people buy), 5% to you, vesting over 30 days."],
-                  ["A 1% fee on each trade", `split 50% to the character's wallet, 20% up the remix tree${parent ? ` (starting with ${parent.name})` : ""}, 30% to KOMA's treasury.`],
-                  ["Canon by vote", "anyone holding 1,000,000 coins (or you, as the character's owner) can propose episodes; holders vote for free."],
-                  ["Graduation", `at ${target.toLocaleString("en-US")} USDC raised the curve closes and its reserves become a Uniswap v4 pool.`],
+                  ["Character NFT, minted to you", `with its own wallet (ERC-6551). The character earns: ${FEE_SPLIT.character}% of every trading fee lands in that wallet.`],
+                  [`${TOTAL_SUPPLY.toLocaleString("en-US")} $${d.symbol || "COIN"}`, "95% on a USDC bonding curve (the price rises as people buy), 5% to you, vesting over 30 days."],
+                  [`A ${TRADE_FEE_PCT}% fee on each trade`, `split ${FEE_SPLIT.character}% to the character's wallet, ${FEE_SPLIT.remix}% up the remix tree${parent ? ` (starting with ${parent.name})` : ""}, ${FEE_SPLIT.treasury}% to KOMA's treasury.`],
+                  ["Canon by vote", `anyone holding ${CANON_THRESHOLD.toLocaleString("en-US")} coins (or you, as the character's owner) can propose episodes; holders vote for free.`],
+                  ["Graduation", `at ${target.toLocaleString("en-US")} USDC raised the curve closes; KOMA takes ${GRADUATION_FEE_PCT}% of the USDC and the rest becomes a Uniswap v4 pool.`],
                 ].map(([t, x]) => (
                   <li key={t} className="flex gap-2.5">
                     <IconCheck width={14} height={14} className="mt-1 shrink-0 text-arb" />
@@ -233,12 +265,12 @@ export function LaunchStudio({ deployed, parent, job }: { deployed: boolean; par
                   </li>
                 ))}
               </ul>
-              <p className="mt-3 text-[12px] text-mute">A testnet collectible. Coins give votes on the story, not a share of fees or any return.</p>
+              <p className="mt-3 text-[12px] text-mute">{COIN_DISCLAIMER}</p>
             </section>
 
             <div>
-              <button type="submit" disabled={down || Boolean(offline) || state.stage === "quoting"} className="slant w-full py-4 text-[22px] sm:w-auto sm:px-10">
-                {state.stage === "quoting" ? "Getting quote…" : "Pay 0.10 USDC & launch"}
+              <button type="submit" disabled={down || Boolean(offline) || aiDown || state.stage === "quoting"} className="slant w-full py-4 text-[22px] sm:w-auto sm:px-10">
+                {state.stage === "quoting" ? "Getting quote…" : `Pay ${LAUNCH_PRICE.toFixed(2)} USDC & launch`}
               </button>
               <p className="mt-3 flex items-center gap-1.5 text-[12px] text-mute">
                 <ArbMark width={12} height={12} /> One signature in your wallet · no gas · about a minute to launch
@@ -248,40 +280,17 @@ export function LaunchStudio({ deployed, parent, job }: { deployed: boolean; par
           </form>
         </div>
 
-        {/* ——— Live preview ——— */}
+        {/* ——— Live preview: the user's own typed values, never sample data ——— */}
         <aside aria-label="Preview" className="md:pt-6">
           <div className="md:sticky md:top-24">
-            <p className="mb-3 text-[12px] text-mute">Preview · how it hangs in Series</p>
-            <div style={{ rotate: "0.8deg" }}>
-              <div className="relative shadow-[0_18px_30px_-12px_rgba(0,0,0,0.9)] ring-1 ring-white/5">
-                <Sheet src="" name={d.characterName.trim()} sizes="400px" />
-                <div className="absolute left-2 top-2 flex gap-1.5">
-                  {d.demo && <DemoBadge target={25} />}
-                  {parent && <span className="bg-paper px-1.5 py-0.5 font-display text-[11px] uppercase leading-none text-paper-ink">Remix</span>}
-                </div>
-              </div>
-            </div>
-            <div className="mt-3.5 px-0.5">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="masthead truncate text-[30px] text-paper">{d.name.trim() || "Series name"}</p>
-                  <p className="mt-1 truncate text-[12.5px] text-mute">
-                    <span className="font-mono text-soft">${d.symbol || "TICKER"}</span> · starring {d.characterName.trim() || "your character"}
-                  </p>
-                </div>
-                <div className="shrink-0 text-right">
-                  <p className="font-mono text-[14px] text-arb">{coinPrice(START_PRICE)}</p>
-                  <p className="mt-0.5 text-[11.5px] text-mute">cap $1K</p>
-                </div>
-              </div>
-              <div className="mt-3">
-                <RaisedBar raised={0} target={target} />
-              </div>
-              {d.pitch.trim() && <p className="mt-3 line-clamp-3 text-[13px] leading-relaxed text-soft">{d.pitch.trim()}</p>}
-            </div>
+            <p className="mb-3 text-[12.5px] text-mute">Your card on the board, as you type. The sheet is drawn after you pay.</p>
+            <SeriesCard s={preview} parentName={parent?.name} preview />
+            {d.pitch.trim() && <p className="mt-3 line-clamp-4 font-letter text-[14px] leading-relaxed text-soft">&ldquo;{d.pitch.trim()}&rdquo;</p>}
           </div>
         </aside>
       </div>
+
+      {arbitrum && <div className="mx-auto max-w-[1320px] px-4 pb-16 md:px-8">{arbitrum}</div>}
 
       <PaySheet state={state} onPay={pay} onCancel={cancel} copy={LAUNCH_COPY} />
     </>

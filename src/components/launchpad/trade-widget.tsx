@@ -10,7 +10,7 @@ import { withSlippage } from "@/lib/launchpad/intents";
 import type { Addr } from "@/lib/launchpad/types";
 import { txUrl } from "@/lib/explorer";
 import { coinAmount, countdown, short, usdAmount } from "@/lib/format";
-import { KOMA } from "@/lib/network";
+import { GASLESS_MIN_USDC, KOMA, TRADE_FEE_PCT } from "@/lib/network";
 import { ArbMark } from "../icons";
 import { useWallet, walletErrorMessage } from "../wallet";
 import { FaucetHint } from "./faucet-hint";
@@ -18,7 +18,8 @@ import { FaucetHint } from "./faucet-hint";
 const SLIPPAGE_BPS = 100;
 const SNIPE_WINDOW = 600;
 const SNIPE_CAP = BigInt(20_000_000) * BigInt(10) ** BigInt(18);
-const BUY_PICKS = ["0.5", "1", "5"];
+const BUY_PICKS = [String(GASLESS_MIN_USDC), "5", "10"];
+const MIN_GASLESS = BigInt(GASLESS_MIN_USDC * 1e6);
 
 export type TradeSeries = {
   id: number;
@@ -33,6 +34,7 @@ export type TradeSeries = {
   /** KomaSwapper and Graduator, for trading in the v4 pool after graduation. */
   swapper: Addr;
   graduator: Addr;
+  quoter: Addr;
   pool: { poolId: string; usdc: number; coins: number } | null;
 };
 
@@ -87,7 +89,7 @@ export function TradeWidget({ s }: { s: TradeSeries }) {
 
   // Before graduation the pool doesn't exist and the curve is the market; after, the reverse.
   const pool = s.graduated;
-  const poolQuote = (amountIn: bigint) => quotePool({ graduator: s.graduator, seriesId: s.id, buyCoin: side === "buy", amountIn });
+  const poolQuote = (amountIn: bigint) => quotePool({ quoter: s.quoter, graduator: s.graduator, seriesId: s.id, buyCoin: side === "buy", amountIn });
 
   // Live quote from the curve (or the v4 pool) itself, a moment after typing stops.
   useEffect(() => {
@@ -96,7 +98,7 @@ export function TradeWidget({ s }: { s: TradeSeries }) {
     const t = setTimeout(async () => {
       try {
         if (pool) {
-          const out = await quotePool({ graduator: s.graduator, seriesId: s.id, buyCoin: side === "buy", amountIn: input });
+          const out = await quotePool({ quoter: s.quoter, graduator: s.graduator, seriesId: s.id, buyCoin: side === "buy", amountIn: input });
           if (live) setQuote({ side, input, out, fee: BigInt(0), used: input });
         } else if (side === "buy") {
           const [out, fee, used] = await lpClient.readContract({ address: s.curve, abi: curveAbi, functionName: "quoteBuy", args: [input] });
@@ -117,7 +119,7 @@ export function TradeWidget({ s }: { s: TradeSeries }) {
       live = false;
       clearTimeout(t);
     };
-  }, [side, input, s.curve, s.complete, pool, s.graduator, s.id]);
+  }, [side, input, s.curve, s.complete, pool, s.graduator, s.quoter, s.id]);
 
   const q = quote && input && quote.side === side && quote.input === input ? quote : null;
   const busy = ["signing", "sending", "confirming"].includes(phase.step);
@@ -130,7 +132,11 @@ export function TradeWidget({ s }: { s: TradeSeries }) {
   const hasGas = (eth.data?.value ?? BigInt(0)) > BigInt(0);
   // Selling into the pool is a wallet transaction (no gasless sell after graduation).
   const needsGas = pool && side === "sell";
-  const canSend = Boolean(me && q && !busy && !shortUsdc && !shortCoins && !overCap && (!needsGas || hasGas));
+  // KOMA relays trades for free from $3; smaller ones would cost more gas than their fee.
+  const gaslessOk = !q || (side === "buy" ? (pool ? q.input : q.used) >= MIN_GASLESS : q.out >= MIN_GASLESS);
+  const tradeOk = Boolean(me && q && !busy && !shortUsdc && !shortCoins && !overCap);
+  const canSend = tradeOk && (needsGas ? hasGas : gaslessOk);
+  const canSendDirect = tradeOk && hasGas;
 
   function pick(next: Side) {
     if (busy) return;
@@ -276,7 +282,7 @@ export function TradeWidget({ s }: { s: TradeSeries }) {
                 <dd className="font-mono text-paper">{side === "buy" ? `${coinsFmt(q.out)} $${s.symbol}` : `${usdcFmt(q.out)} USDC`}</dd>
               </div>
               <div className="flex justify-between gap-3 py-0.5">
-                <dt className="text-mute">{pool ? "Pool fee" : "Fee (1%)"}</dt>
+                <dt className="text-mute">{pool ? "Pool fee" : `Fee (${TRADE_FEE_PCT}%)`}</dt>
                 <dd className="font-mono text-soft">{pool ? "0.3%, included" : usdcFmt(q.fee)}</dd>
               </div>
               <div className="flex justify-between gap-3 py-0.5">
@@ -326,7 +332,9 @@ export function TradeWidget({ s }: { s: TradeSeries }) {
                           ? hasGas
                             ? "Sell into the pool"
                             : "Needs ETH for gas"
-                          : side === "buy"
+                          : !gaslessOk
+                            ? `Gasless from $${GASLESS_MIN_USDC}`
+                            : side === "buy"
                             ? "Sign & buy — no gas"
                             : "Sign & sell — no gas"}
               </button>
@@ -334,12 +342,14 @@ export function TradeWidget({ s }: { s: TradeSeries }) {
                 <ArbMark width={12} height={12} />{" "}
                 {needsGas
                   ? "Selling into the v4 pool is a wallet transaction; your wallet pays the gas"
-                  : `${side === "buy" ? "One USDC signature" : "Two signatures (permit + sell)"} · KOMA’s relayer pays the gas`}
+                  : !gaslessOk
+                    ? `KOMA pays the gas on trades of $${GASLESS_MIN_USDC} or more. Smaller ones go through your own wallet.`
+                    : `${side === "buy" ? "One USDC signature" : "Two signatures (permit + sell)"} · KOMA’s relayer pays the gas`}
               </p>
               {hasGas && !needsGas && (
                 <button
                   onClick={() => trade(true)}
-                  disabled={!canSend}
+                  disabled={!canSendDirect}
                   className="mx-auto mt-2 block text-[12.5px] text-soft underline decoration-rule underline-offset-4 hover:text-paper disabled:opacity-40"
                 >
                   Send it yourself (your wallet pays the gas)

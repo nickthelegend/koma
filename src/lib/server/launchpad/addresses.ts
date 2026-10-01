@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { V4_QUOTERS } from "@/lib/launchpad/abi";
 import type { LaunchpadAddresses } from "@/lib/launchpad/types";
 import { config } from "../config";
 
@@ -15,7 +16,7 @@ export function launchpad(): LaunchpadAddresses | null {
   const file = process.env.KOMA_LAUNCHPAD_ADDRESSES || path.join(process.cwd(), "deploy", `addresses.${config.network.chain.id}.json`);
   try {
     const a = JSON.parse(readFileSync(file, "utf8")) as LaunchpadAddresses;
-    cached = a.chainId === config.network.chain.id && a.seriesFactory ? a : null;
+    cached = a.chainId === config.network.chain.id && a.seriesFactory ? { ...a, v4Quoter: a.v4Quoter ?? V4_QUOTERS[a.chainId] } : null;
     if (!cached) console.warn(`[koma] ${file} is for chain ${a.chainId}, not ${config.network.chain.id}; launchpad off`);
   } catch {
     cached = null;

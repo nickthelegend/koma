@@ -2,8 +2,8 @@ import { randomBytes } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { withX402 } from "@x402/next";
 import { decodePaymentSignatureHeader } from "@x402/core/http";
-import { parseOrder } from "@/lib/order";
-import { PRICE_PER_PAGE, USDC_DECIMALS, USDC_DOMAIN } from "@/lib/network";
+import { pagePrice, parseOrder } from "@/lib/order";
+import { USDC_DECIMALS, USDC_DOMAIN } from "@/lib/network";
 import { config, publicClient } from "@/lib/server/config";
 import { listIssues, saveJob } from "@/lib/server/store";
 import { network, pendingByNonce, resourceServer } from "@/lib/server/x402";
@@ -69,15 +69,16 @@ const makePaid = () =>
         price: async (ctx) => {
           const parsed = parseOrder(await ctx.adapter.getBody?.());
           const pages = "order" in parsed ? parsed.order.pages : 1;
+          const episode = "order" in parsed && Boolean(parsed.order.seriesId);
           return {
-            amount: String(Math.round(pages * PRICE_PER_PAGE * 10 ** USDC_DECIMALS)),
+            amount: String(Math.round(pages * pagePrice(episode) * 10 ** USDC_DECIMALS)),
             asset: config.network.usdc,
             extra: { ...USDC_DOMAIN },
           };
         },
         maxTimeoutSeconds: 300,
       },
-      description: "One AI-written, AI-drawn comic issue, lettered and minted to the payer on Arbitrum. $0.10 per page.",
+      description: "One AI-written, AI-drawn comic issue, lettered and minted to the payer on Arbitrum. $0.10 per page; $0.30 per page for a series episode.",
       mimeType: "application/json",
     },
     resourceServer,

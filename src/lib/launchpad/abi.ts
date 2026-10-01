@@ -13,6 +13,9 @@ export const factoryAbi = parseAbi([
   "error AccessControlBadConfirmation()",
   "error AccessControlUnauthorizedAccount(address account, bytes32 neededRole)",
   "error EmptyName()",
+  "error InvalidBounds()",
+  "error InvalidVotingWindow(uint64 window)",
+  "error TargetTooLow(uint256 target, uint256 min)",
   "error UnknownParent(uint256 parentSeriesId)",
   "error ZeroAddress()",
 ]);
@@ -33,12 +36,16 @@ export const curveAbi = parseAbi([
   "event Trade(address indexed trader, bool indexed isBuy, uint256 usdcAmount, uint256 coinAmount, uint256 fee, uint256 vU, uint256 vC, uint256 raised)",
   "event Completed(uint256 raised)",
   "event Graduated(address pool, bytes32 poolId, uint256 usdcToPool, uint256 coinToPool)",
-  // Errors, so reverts decode to names the UI can explain
+
+  "function unroutedFees() view returns (uint256)",
+  "function flushFees()",
+  "function invalidateSellNonce()",
   "error AlreadyGraduated()",
   "error CoinAlreadySet()",
   "error CoinNotSet()",
   "error CurveComplete()",
   "error Expired(uint256 deadline)",
+  "error FeeRoutingOutOfGas()",
   "error InsufficientAllowance(uint256 allowance, uint256 needed)",
   "error InsufficientReserve(uint256 gross, uint256 raised)",
   "error InvalidIntentSignature()",
@@ -53,6 +60,10 @@ export const curveAbi = parseAbi([
   "error Unauthorized(address caller)",
   "error ZeroAddress()",
   "error ZeroAmount()",
+  "error CheckpointUnorderedInsertion()",
+  "error ECDSAInvalidSignature()",
+  "error ECDSAInvalidSignatureLength(uint256 length)",
+  "error ECDSAInvalidSignatureS(bytes32 s)",
   "error ERC20ExceededSafeSupply(uint256 increasedSupply, uint256 cap)",
   "error ERC20InsufficientAllowance(address spender, uint256 allowance, uint256 needed)",
   "error ERC20InsufficientBalance(address sender, uint256 balance, uint256 needed)",
@@ -62,7 +73,12 @@ export const curveAbi = parseAbi([
   "error ERC20InvalidSpender(address spender)",
   "error ERC2612ExpiredSignature(uint256 deadline)",
   "error ERC2612InvalidSigner(address signer, address owner)",
+  "error ERC5805FutureLookup(uint256 timepoint, uint48 clock)",
+  "error ERC6372InconsistentClock()",
+  "error InvalidAccountNonce(address account, uint256 currentNonce)",
   "error PoolLockedUntilGraduation()",
+  "error SafeCastOverflowedUintDowncast(uint8 bits, uint256 value)",
+  "error VotesExpiredSignature(uint256 expiry)",
 ]);
 
 export const coinAbi = parseAbi([
@@ -152,8 +168,15 @@ export const quoterAbi = parseAbi([
   "struct QuoteExactSingleParams { PoolKey poolKey; bool zeroForOne; uint128 exactAmount; bytes hookData; }",
   "function quoteExactInputSingle(QuoteExactSingleParams params) returns (uint256 amountOut, uint256 gasEstimate)",
 ]);
-/** Uniswap v4 Quoter on Arbitrum Sepolia (developers.uniswap.org deployments). */
-export const V4_QUOTER = "0x7de51022d70a725b508085468052e25e22b5c4c9" as const;
+/**
+ * Uniswap v4 Quoter per chain (developers.uniswap.org deployments), used when an
+ * addresses file predates its `v4Quoter` field. Forks use their parent chain's.
+ */
+export const V4_QUOTERS: Record<number, `0x${string}`> = {
+  42161: "0x3972c00f7ed4885e145823eb7c655375d275a1c5",
+  421614: "0x7de51022d70a725b508085468052e25e22b5c4c9",
+  4216141: "0x7de51022d70a725b508085468052e25e22b5c4c9",
+};
 
 /** EIP-712 vote a holder signs for free; the relayer tallies and finalizes. */
 export const voteTypes = {
@@ -200,3 +223,21 @@ export const receiveAuthTypes = {
 export const BUY_TAG = "KOMA_BUY_V1";
 export const TOTAL_SUPPLY = 1_000_000_000;
 export const CANON_THRESHOLD = 1_000_000;
+
+/** Graduation targets the factory uses (LaunchpadConstants): a normal series, and a testnet demo series. */
+export const GRADUATION_TARGET_USDC = 5_000;
+export const DEMO_TARGET_USDC = 25;
+/** The curve opens with 1,000 virtual USDC against 1B virtual coins. */
+export const START_PRICE_USDC = 1_000 / TOTAL_SUPPLY;
+
+/** Tokenbound AccountV3 (ERC-6551): the character's wallet. Only the Character NFT's owner can call execute. */
+export const tokenboundAbi = parseAbi([
+  "function execute(address to, uint256 value, bytes data, uint8 operation) payable returns (bytes)",
+  "function owner() view returns (address)",
+  "function token() view returns (uint256 chainId, address tokenContract, uint256 tokenId)",
+  "error NotAuthorized()",
+  "error InvalidOperation()",
+]);
+
+/** ERC-20 transfer, encoded as the call the character's wallet makes. */
+export const erc20TransferAbi = parseAbi(["function transfer(address to, uint256 amount) returns (bool)"]);

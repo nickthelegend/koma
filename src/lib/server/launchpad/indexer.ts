@@ -193,10 +193,30 @@ async function apply(logs: Log[]) {
   }
 }
 
+/**
+ * A new launchpad deployment restarts series ids at 1, so rows indexed from the
+ * previous one would collide with (and shadow) the new series. When the factory
+ * changes, clear everything derived from the old deployment and start over.
+ */
+function followDeployment() {
+  const a = launchpad()!;
+  const current = `${a.chainId}:${a.seriesFactory.toLowerCase()}`;
+  if (meta("deployment") === current) return;
+  const d = db();
+  d.exec(`
+    DELETE FROM lp_series; DELETE FROM lp_series_meta; DELETE FROM lp_trades; DELETE FROM lp_balances;
+    DELETE FROM lp_routed; DELETE FROM lp_slots; DELETE FROM lp_proposals; DELETE FROM lp_votes; DELETE FROM lp_pending_proposals;
+    DELETE FROM lp_meta WHERE key LIKE 'cursor:%';
+  `);
+  setMeta("deployment", current);
+  console.log(`[koma] indexer: following launchpad ${current}`);
+}
+
 /** Index up to the chain head once. Returns the block it reached. */
 export async function indexOnce(): Promise<bigint | null> {
   const a = launchpad();
   if (!a) return null;
+  followDeployment();
   const key = cursorKey();
   const head = await publicClient.getBlockNumber();
   let from = BigInt(meta(key) ?? a.deployBlock);

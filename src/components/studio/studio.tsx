@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { GENRES, cast as roster, styles } from "@/lib/studio-config";
-import { PRICE_PER_PAGE } from "@/lib/network";
+import { EPISODE_PRICE_PER_PAGE, PRICE_PER_PAGE } from "@/lib/network";
 import type { Comic, CustomCharacter, Genre } from "@/lib/types";
 import { Receipt } from "./receipt";
 import { PaySheet } from "./pay-sheet";
@@ -11,6 +11,7 @@ import { Progress } from "./progress";
 import { useGeneration } from "./use-generation";
 import { ArbMark, IconBolt, IconCheck, IconPlus, IconRemix } from "../icons";
 import { EpisodeBanner, type EpisodeSeries } from "../launchpad/episode-banner";
+import { AI_DOWN_NOTE, useServerStatus } from "../use-server-status";
 
 const STARTERS = [
   { label: "Heist gone wrong", text: "Four broke crooks plan a vault job that goes sideways when the vault starts talking back." },
@@ -44,20 +45,17 @@ export function Studio({ remix, job, genre: initialGenre, series }: { remix?: Co
   const [genre, setGenre] = useState<Genre | undefined>(initialGenre ?? remix?.genre);
   const [pages, setPages] = useState(remix?.pageCount ?? 2);
   const { state, requestQuote, pay, cancel, resume } = useGeneration();
-  const [offline, setOffline] = useState<string | null>(null);
+  const { offline, aiDown } = useServerStatus();
 
   useEffect(() => {
     if (job) resume(job);
-    fetch("/api/status")
-      .then((r) => r.json())
-      .then((s: { ready: boolean; missing: string[] }) => setOffline(s.ready ? null : s.missing.join(", ")))
-      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const styleLabel = styles.find((s) => s.id === style)!.label;
-  const total = (pages * PRICE_PER_PAGE).toFixed(2);
-  const ready = prompt.trim().length >= 12 && state.stage !== "quoting";
+  const perPage = series ? EPISODE_PRICE_PER_PAGE : PRICE_PER_PAGE;
+  const total = (pages * perPage).toFixed(2);
+  const ready = prompt.trim().length >= 12 && state.stage !== "quoting" && !aiDown && !offline;
   const order = () => ({ prompt, style, cast, custom, genre, pages, remixOf: series ? undefined : remix?.id, seriesId: series?.id });
   const picked = cast.length + custom.length;
   const draftOk = draft.name.trim().length >= 2 && draft.name.trim().length <= 30 && draft.look.trim().length >= 10 && draft.look.trim().length <= 200;
@@ -88,6 +86,11 @@ export function Studio({ remix, job, genre: initialGenre, series }: { remix?: Co
 
           {series && <EpisodeBanner series={series} />}
 
+          {aiDown && (
+            <p role="status" className="mt-6 border border-kapow/60 bg-kapow/10 px-4 py-3 text-[13.5px] leading-relaxed text-soft">
+              {AI_DOWN_NOTE}
+            </p>
+          )}
           {offline && (
             <p role="status" className="mt-6 border border-kapow/60 bg-kapow/10 px-4 py-3 text-[13.5px] leading-relaxed text-soft">
               <span className="font-semibold text-paper">The studio is offline.</span> This server hasn&rsquo;t been given {offline} yet,
@@ -288,7 +291,7 @@ export function Studio({ remix, job, genre: initialGenre, series }: { remix?: Co
                   >
                     <span className="block font-display text-[26px] leading-none">{n}</span>
                     <span className={`mt-1 block text-[11.5px] ${on ? "text-ink/70" : "text-mute"}`}>
-                      {n === 1 ? "page" : "pages"} · ${(n * PRICE_PER_PAGE).toFixed(2)}
+                      {n === 1 ? "page" : "pages"} · ${(n * perPage).toFixed(2)}
                     </span>
                   </button>
                 );
@@ -301,7 +304,7 @@ export function Studio({ remix, job, genre: initialGenre, series }: { remix?: Co
         <aside className="hidden md:block">
           <div className="sticky top-24">
             <div className="rotate-[1.2deg]">
-              <Receipt pages={pages} style={styleLabel} castCount={picked} />
+              <Receipt pages={pages} style={styleLabel} castCount={picked} perPage={perPage} />
             </div>
             <button
               onClick={() => requestQuote(order())}

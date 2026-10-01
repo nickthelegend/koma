@@ -1,5 +1,6 @@
 import { keccak256, parseEventLogs } from "viem";
 import { factoryAbi, usdcAbi } from "@/lib/launchpad/abi";
+import { LAUNCH_PRICE } from "@/lib/network";
 import type { LaunchJob } from "@/lib/launchpad/types";
 import { characterSheet } from "../ai";
 import { config, publicClient, serverWallet } from "../config";
@@ -9,7 +10,7 @@ import { requireLaunchpad } from "./addresses";
 import { db, saveLaunchJob, unfinishedLaunchJobs } from "./db";
 import { reason } from "./relay";
 
-export const LAUNCH_PRICE_USDC = 0.1;
+export const LAUNCH_PRICE_USDC = LAUNCH_PRICE;
 const DEMO_TARGET = BigInt(25e6);
 const DEMO_WINDOW = BigInt(300);
 

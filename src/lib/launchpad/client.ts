@@ -1,6 +1,6 @@
-import { createPublicClient, http, toFunctionSelector, toHex, type Account, type Address, type Chain, type Hex, type Transport, type WalletClient } from "viem";
+import { createPublicClient, encodeFunctionData, http, toFunctionSelector, toHex, type Account, type Address, type Chain, type Hex, type Transport, type WalletClient } from "viem";
 import { KOMA, RPC_URL, USDC_DOMAIN } from "@/lib/network";
-import { coinAbi, curveAbi, graduatorAbi, permitTypes, quoterAbi, receiveAuthTypes, sellTypes, swapperAbi, usdcAbi, V4_QUOTER, voteTypes } from "./abi";
+import { coinAbi, curveAbi, erc20TransferAbi, graduatorAbi, permitTypes, quoterAbi, receiveAuthTypes, sellTypes, swapperAbi, tokenboundAbi, usdcAbi, voteTypes } from "./abi";
 import { buyNonce } from "./intents";
 
 // Browser-side launchpad helpers: reads through KOMA's RPC, and the typed-data
@@ -123,12 +123,12 @@ export type SwapBuyRelay = {
 };
 
 /** Exact-input quote from the v4 Quoter. `buyCoin`: USDC in, coins out. */
-export async function quotePool(o: { graduator: Address; seriesId: number; buyCoin: boolean; amountIn: bigint }) {
+export async function quotePool(o: { quoter: Address; graduator: Address; seriesId: number; buyCoin: boolean; amountIn: bigint }) {
   const key = await lpClient.readContract({ address: o.graduator, abi: graduatorAbi, functionName: "poolKeyOf", args: [BigInt(o.seriesId)] });
   // USDC → coin is zeroForOne exactly when USDC is currency0.
   const usdcIs0 = key.currency0.toLowerCase() === KOMA.usdc.toLowerCase();
   const { result } = await lpClient.simulateContract({
-    address: V4_QUOTER,
+    address: o.quoter,
     abi: quoterAbi,
     functionName: "quoteExactInputSingle",
     args: [{ poolKey: key, zeroForOne: o.buyCoin === usdcIs0, exactAmount: o.amountIn, hookData: "0x" }],
@@ -257,4 +257,23 @@ export async function landed(hash: Hex) {
   const r = await lpClient.waitForTransactionReceipt({ hash, timeout: 120_000 });
   if (r.status !== "success") throw new Error("The transaction reverted on-chain.");
   return r;
+}
+
+// ——— The character's wallet (ERC-6551, Tokenbound AccountV3).
+
+/**
+ * Moves USDC out of a character's wallet to the Character NFT's owner. The
+ * owner's wallet calls execute() on the account, which makes the account call
+ * USDC.transfer. A normal wallet transaction: the owner pays the gas.
+ */
+export async function withdrawCharacterUsdc(wallet: Signer, o: { account: Address; amount: bigint }): Promise<Hex> {
+  const data = encodeFunctionData({ abi: erc20TransferAbi, functionName: "transfer", args: [wallet.account.address, o.amount] });
+  return wallet.writeContract({
+    account: wallet.account,
+    chain: KOMA.chain,
+    address: o.account,
+    abi: tokenboundAbi,
+    functionName: "execute",
+    args: [KOMA.usdc, BigInt(0), data, 0],
+  });
 }

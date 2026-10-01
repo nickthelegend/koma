@@ -58,6 +58,19 @@ export const RPC_URL = RPC_OVERRIDE || KOMA.chain.rpcUrls.default.http[0];
 /** EIP-712 domain of USDC (FiatToken v2) on every network KOMA supports. */
 export const USDC_DOMAIN = { name: "USD Coin", version: "2" } as const;
 
+// ——— Pricing (USDC). Comics keep the 10¢ hook; everything that costs KOMA more pays its way.
+/** A comic page. The loss leader: about break-even on one page, profitable from two. */
 export const PRICE_PER_PAGE = 0.1;
+/** A series episode page: drawn with the character sheet as a reference, which costs fal twice as much per panel. */
+export const EPISODE_PRICE_PER_PAGE = 0.3;
+/** Launching a series (character sheet + a ~5M-gas launch transaction). */
+export const LAUNCH_PRICE = 1;
+/** Curve trading fee and how it's split on chain (LaunchpadConstants / royalty router). */
+export const TRADE_FEE_PCT = 1.5;
+export const FEE_SPLIT = { character: 40, remix: 20, treasury: 40 } as const;
+/** Share of the USDC raised that goes to KOMA's treasury when a curve graduates. */
+export const GRADUATION_FEE_PCT = 5;
+/** Smallest trade KOMA's relayer submits for free; below it the trade costs more gas than its fee. */
+export const GASLESS_MIN_USDC = 3;
 export const PAGE_OPTIONS = [1, 2, 4, 6] as const;
 export const USDC_DECIMALS = 6;

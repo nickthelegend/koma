@@ -4,7 +4,7 @@ import { useState } from "react";
 import { KOMA } from "@/lib/network";
 import { useWallet } from "../wallet";
 
-/** Where test USDC comes from on this network: KOMA's own faucet, or Circle's. */
+/** Not enough USDC: on testnets, where free test USDC comes from; on Arbitrum One, plainly how much more is needed. */
 export function FaucetHint({ need }: { need: number }) {
   const { address, usdc, refreshBalance } = useWallet();
   const [faucet, setFaucet] = useState<{ busy: boolean; error?: string }>({ busy: false });
@@ -32,6 +32,7 @@ export function FaucetHint({ need }: { need: number }) {
           {faucet.error && <span role="alert" className="mt-2 block text-kapow">{faucet.error}</span>}
         </>
       )}
+      {KOMA.key === "arbitrum-one" && <> Send USDC on Arbitrum One to this wallet, from an exchange or a bridge.</>}
       {KOMA.key === "arbitrum-sepolia" && (
         <>
           {" "}Test USDC is free at{" "}

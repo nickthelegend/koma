@@ -11,7 +11,13 @@
     "contracts:test": "cd contracts && forge test",
     "contracts:deploy": "cd contracts && forge script script/Deploy.s.sol --rpc-url ${RPC_URL:-arbitrum_sepolia} --broadcast",
     "buy": "node scripts/buy-comic.mjs",
-    "art": "node scripts/gen-art.mjs"
+    "contracts:test:fork": "cd contracts && FORK_TESTS=1 forge test --match-path 'test/fork/*'",
+    "stylus:test": "cd stylus && cargo test",
+    "test:api": "node scripts/e2e-api.mjs",
+    "test:launchpad": "node scripts/e2e-launchpad.mjs",
+    "check:economics": "node scripts/check-economics.mjs",
+    "preflight:mainnet": "node scripts/mainnet-preflight.mjs",
+    "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.104.0",

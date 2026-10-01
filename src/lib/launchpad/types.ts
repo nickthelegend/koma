@@ -9,6 +9,8 @@ export type LaunchpadAddresses = {
   canonRegistry: Addr;
   graduator: Addr;
   swapper: Addr;
+  /** Uniswap v4 Quoter on this chain (filled per chain when an older addresses file lacks it). */
+  v4Quoter: Addr;
   curveMath: Addr;
   royaltyRouter: Addr;
   engine: "stylus" | "solidity-reference";
@@ -109,4 +111,22 @@ export type LaunchJob = {
   failedAt?: LaunchStage;
   createdAt: string;
   updatedAt: string;
+};
+
+/** One line of the board's live tape: something that happened on-chain, from the index. */
+export type ActivityEvent = {
+  /** Stable across refreshes: kind, series, transaction and log. */
+  id: string;
+  kind: "launch" | "buy" | "sell" | "graduated" | "canon";
+  seriesId: number;
+  name: string;
+  symbol: string;
+  /** Block time (unix seconds). For canon, when its vote closed; for graduation, the trade that filled the curve. */
+  at: number;
+  tx: string | null;
+  who: Addr | null;
+  usdc: number | null;
+  episode: number | null;
+  /** A trade in the graduated Uniswap v4 pool rather than on the curve. */
+  pool: boolean;
 };

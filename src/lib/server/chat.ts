@@ -18,7 +18,7 @@ Answer with strict JSON only, no code fences:
   "synopsis": string (40-450 chars: setup, conflict, the ending beat; this is what the writer gets),
   "genre": one of ${JSON.stringify(GENRES)},
   "style": one of ${JSON.stringify(styles.map((s) => s.id))} (${styles.map((s) => `${s.id} = ${s.label}`).join("; ")}),
-  "pages": 1 | 2 | 4 | 6 (default 2 unless they ask; each page is 4 panels, $0.10 a page),
+  "pages": 1 | 2 | 4 | 6 (default 2 unless they ask; each page is 4 panels, $0.10 a page, or $0.30 a page for a series episode),
   "cast": ids from this roster, only if they fit or were asked for: ${roster.map((c) => `${c.id} = ${c.name}, ${c.role}`).join("; ")},
   "custom": [{"name": string, "look": string (10-200 chars, concrete visual description: build, hair, clothes, one signature detail)}]
 }}
@@ -41,7 +41,7 @@ function toPitch(raw: unknown, remixOf?: string): Pitch | { error: string } {
   const p = (raw ?? {}) as Record<string, unknown>;
   const parsed = parseOrder({ prompt: p.synopsis, title: p.title, genre: p.genre, style: p.style, pages: p.pages, cast: p.cast, custom: p.custom, remixOf });
   if ("error" in parsed) return parsed;
-  return { ...parsed.order, title: parsed.order.title ?? "Untitled", price: priceFor(parsed.order.pages) };
+  return { ...parsed.order, title: parsed.order.title ?? "Untitled", price: priceFor(parsed.order.pages, Boolean(parsed.order.seriesId)) };
 }
 
 /** One editor turn: a reply, and a pitch that is already a valid paid order. */

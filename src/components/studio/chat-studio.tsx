@@ -12,6 +12,8 @@ import { PitchCard } from "./pitch-card";
 import { Steps } from "./progress";
 import { useGeneration } from "./use-generation";
 import { EpisodeBanner, type EpisodeSeries } from "../launchpad/episode-banner";
+import { priceFor } from "@/lib/order";
+import { AI_DOWN_NOTE, useServerStatus } from "../use-server-status";
 
 type Msg = { role: "user" | "assistant"; content: string; pitched?: string };
 type Saved = { messages: Msg[]; pitch: Pitch | null; jobId?: string; genre?: Genre };
@@ -82,7 +84,7 @@ export function ChatStudio({ remix, job, genre, series }: { remix?: Comic; job?:
   const [draft, setDraft] = useState("");
   const [thinking, setThinking] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
-  const [offline, setOffline] = useState<string | null>(null);
+  const { offline, aiDown } = useServerStatus();
   const { state, requestQuote, pay, cancel, resume } = useGeneration();
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -90,10 +92,6 @@ export function ChatStudio({ remix, job, genre, series }: { remix?: Comic; job?:
   // Pick a running issue back up, and check the server can take payments.
   useEffect(() => {
     if (job) resume(job);
-    fetch("/api/status")
-      .then((r) => r.json())
-      .then((s: { ready: boolean; missing: string[] }) => setOffline(s.ready ? null : s.missing.join(", ")))
-      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -110,6 +108,7 @@ export function ChatStudio({ remix, job, genre, series }: { remix?: Comic; job?:
   const running = RUNNING.includes(state.stage);
 
   async function send(text: string) {
+    if (aiDown) return;
     const content = text.trim();
     if (!content || thinking || running) return;
     const next: Msg[] = [...messages, { role: "user", content }];
@@ -126,7 +125,8 @@ export function ChatStudio({ remix, job, genre, series }: { remix?: Comic; job?:
       const body = (await res.json().catch(() => ({}))) as { reply?: string; pitch?: Pitch | null; error?: string };
       if (!res.ok || !body.reply) throw new Error(body.error ?? `The editor didn't answer (${res.status}).`);
       setMessages((m) => [...m, { role: "assistant", content: body.reply!, pitched: body.pitch?.title }]);
-      if (body.pitch) setPitch(body.pitch);
+      // An episode is priced as one (the editor doesn't know it's writing for a series).
+      if (body.pitch) setPitch(series ? { ...body.pitch, seriesId: series.id, remixOf: undefined, price: priceFor(body.pitch.pages, true) } : body.pitch);
     } catch (e) {
       setChatError((e as Error).message);
       setMessages(next.slice(0, -1));
@@ -149,7 +149,7 @@ export function ChatStudio({ remix, job, genre, series }: { remix?: Comic; job?:
   const done = state.stage === "done";
 
   const card = pitch && (
-    <PitchCard pitch={pitch} onChange={setPitch} onPay={payForPitch} busy={state.stage === "quoting"} locked={running || !!offline} episodeOf={series?.name} />
+    <PitchCard pitch={pitch} onChange={setPitch} onPay={payForPitch} busy={state.stage === "quoting"} locked={running || !!offline || aiDown} episodeOf={series?.name} />
   );
 
   return (
@@ -168,6 +168,11 @@ export function ChatStudio({ remix, job, genre, series }: { remix?: Comic; job?:
             </div>
           </div>
 
+          {aiDown && (
+            <p role="status" className="mt-5 border border-kapow/60 bg-kapow/10 px-4 py-3 text-[13.5px] leading-relaxed text-soft">
+              {AI_DOWN_NOTE}
+            </p>
+          )}
           {offline && (
             <p role="status" className="mt-5 border border-kapow/60 bg-kapow/10 px-4 py-3 text-[13.5px] leading-relaxed text-soft">
               <span className="font-semibold text-paper">The studio is offline.</span> This server hasn&rsquo;t been given {offline} yet,
@@ -234,7 +239,7 @@ export function ChatStudio({ remix, job, genre, series }: { remix?: Comic; job?:
           {messages.length === 1 && !running && (
             <div className="mt-5 flex flex-wrap gap-2">
               {STARTERS.map((s) => (
-                <button key={s} onClick={() => send(s)} className="border border-rule px-3 py-1.5 text-[13px] text-soft hover:border-paper hover:text-paper">
+                <button key={s} onClick={() => send(s)} disabled={aiDown} className="border border-rule px-3 py-1.5 text-[13px] text-soft hover:border-paper hover:text-paper disabled:opacity-40">
                   {s}
                 </button>
               ))}
@@ -321,16 +326,17 @@ export function ChatStudio({ remix, job, genre, series }: { remix?: Comic; job?:
               rows={1}
               maxLength={1000}
               onChange={(e) => setDraft(e.target.value)}
+              disabled={aiDown}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
+                if (e.key === "Enter" && !e.shiftKey && !aiDown) {
                   e.preventDefault();
                   void send(draft);
                 }
               }}
-              placeholder={pitch ? "Ask for changes…" : "Tell the editor your idea…"}
+              placeholder={aiDown ? "The editor is offline right now" : pitch ? "Ask for changes…" : "Tell the editor your idea…"}
               className="max-h-40 min-h-12 flex-1 resize-none border border-rule bg-stock px-4 py-3 text-[15.5px] text-paper placeholder:text-mute focus:border-soft focus:outline-none md:max-w-[calc(100%-420px)]"
             />
-            <button type="submit" disabled={!draft.trim() || thinking} aria-label="Send" className="slant h-12 w-14 shrink-0">
+            <button type="submit" disabled={!draft.trim() || thinking || aiDown} aria-label="Send" className="slant h-12 w-14 shrink-0">
               <IconArrow width={20} height={20} />
             </button>
           </div>

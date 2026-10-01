@@ -143,8 +143,8 @@ export function CanonBoard({ seriesId, symbol, characterName, coin, canonRegistr
     <section aria-labelledby="canon-h" className="border border-rule bg-stock">
       <header className="flex flex-wrap items-end justify-between gap-3 border-b border-rule px-4 py-3.5 md:px-5">
         <div>
-          <p className="text-[12px] text-mute">Canon · decided by ${symbol} holders</p>
-          <h2 id="canon-h" className="masthead mt-1 text-[40px] text-paper md:text-[52px]">Episode {episode}</h2>
+          <p className="text-[13px] text-soft">What happens next, decided by ${symbol} holders</p>
+          <h2 id="canon-h" className="masthead mt-1.5 text-[44px] text-paper md:text-[56px]">Episode {episode}</h2>
         </div>
         <div className="text-right" aria-live="off">
           {!slot ? (
@@ -198,7 +198,7 @@ export function CanonBoard({ seriesId, symbol, characterName, coin, canonRegistr
 
         {proposals.length === 0 ? (
           <div className="mt-4 border border-dashed border-rule px-5 py-10 text-center">
-            <p className="font-display text-[26px] uppercase text-paper">Episode {episode} is open — propose it</p>
+            <p className="font-display text-[26px] uppercase leading-tight text-paper">Episode {episode} is open. Propose it.</p>
             <p className="mx-auto mt-2 max-w-[46ch] text-[13.5px] leading-relaxed text-mute">
               Make a comic starring {characterName} in the studio. It&rsquo;s minted to you like any issue and entered as a proposal.
               {slot ? " Voting is open until the clock runs out." : " The first proposal starts the voting clock."}
@@ -221,21 +221,24 @@ export function CanonBoard({ seriesId, symbol, characterName, coin, canonRegistr
                 const leading = p.votes > 0 && p.votes === top;
                 const pct = total > 0 ? (p.votes / total) * 100 : 0;
                 return (
-                  <li key={p.issueId} className={`flex gap-3 border p-3 ${chosen ? "border-kapow" : "border-rule"} bg-ink`}>
-                    <Link href={p.issue ? `/c/${p.issue.id}` : "#"} className="relative aspect-[3/4] w-[84px] shrink-0 overflow-hidden bg-stock-2" aria-label={p.issue ? `Read ${p.issue.title}` : "Issue"}>
-                      {p.issue?.cover && <Image src={p.issue.cover} alt="" fill sizes="84px" className="object-cover" />}
+                  <li key={p.issueId} className={`flex gap-3.5 border p-3 ${chosen ? "border-kapow" : leading ? "border-paper/40" : "border-rule"} bg-ink`}>
+                    <Link href={p.issue ? `/c/${p.issue.id}` : "#"} className="relative aspect-[3/4] w-[96px] shrink-0 overflow-hidden bg-stock-2" aria-label={p.issue ? `Read ${p.issue.title}` : "Issue"}>
+                      {p.issue?.cover && <Image src={p.issue.cover} alt="" fill sizes="96px" className="object-cover" />}
                     </Link>
                     <div className="flex min-w-0 flex-1 flex-col">
-                      <p className="truncate font-display text-[19px] uppercase leading-tight text-paper">{p.issue?.title ?? `Issue #${p.issueId}`}</p>
+                      <p className="line-clamp-2 font-display text-[19px] uppercase leading-tight text-paper">{p.issue?.title ?? `Issue #${p.issueId}`}</p>
                       <p className="mt-0.5 truncate text-[11.5px] text-mute">
                         by <span className="font-mono">{short(p.proposer)}</span> · {agoSec(p.proposedAt, now)}
-                        {leading && <span className="ml-1.5 text-bam">· leading</span>}
+                        {leading && <span className="ml-1.5 font-semibold text-bam">· leading</span>}
                       </p>
-                      <div className="mt-2 h-1.5 bg-rule" aria-hidden>
+                      <div className="mt-2.5 h-2 bg-rule" aria-hidden>
                         <div className="h-full bg-kapow transition-[width] duration-500" style={{ width: `${pct}%` }} />
                       </div>
-                      <p className="mt-1 font-mono text-[11px] text-mute">
-                        {coinAmount(p.votes)} votes · {p.voters} {p.voters === 1 ? "voter" : "voters"}
+                      <p className="mt-1 flex justify-between gap-2 font-mono text-[11.5px] text-mute">
+                        <span>
+                          {coinAmount(p.votes)} votes · {p.voters} {p.voters === 1 ? "voter" : "voters"}
+                        </span>
+                        <span className="text-soft">{Math.round(pct)}%</span>
                       </p>
                       <div className="mt-auto pt-2">
                         {chosen ? (
@@ -262,7 +265,7 @@ export function CanonBoard({ seriesId, symbol, characterName, coin, canonRegistr
         )}
 
         {/* ——— Canon so far ——— */}
-        <h3 className="mt-8 font-display text-[20px] uppercase tracking-wide text-paper">Canon so far</h3>
+        <h3 className="mt-9 font-display text-[22px] uppercase leading-none text-paper">Canon so far</h3>
         {view.canon.length === 0 ? (
           <p className="mt-2 text-[13px] text-mute">No episode is canon yet. The first vote decides episode 1.</p>
         ) : (
@@ -288,7 +291,7 @@ export function CanonBoard({ seriesId, symbol, characterName, coin, canonRegistr
 
         {view.alternates.length > 0 && (
           <>
-            <h3 className="mt-8 font-display text-[20px] uppercase tracking-wide text-paper">Alternate universes</h3>
+            <h3 className="mt-9 font-display text-[22px] uppercase leading-none text-paper">Alternate universes</h3>
             <p className="mt-1 text-[12.5px] text-mute">Proposals that lost their vote. Still minted, still readable.</p>
             <ul className="mt-3 flex flex-wrap gap-2">
               {view.alternates.map((a) => (

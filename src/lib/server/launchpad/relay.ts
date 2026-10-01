@@ -2,6 +2,7 @@ import { BaseError, ContractFunctionRevertedError, keccak256, parseSignature, st
 import { canonAbi, characterAbi, curveAbi, swapperAbi } from "@/lib/launchpad/abi";
 import type { Addr } from "@/lib/launchpad/types";
 import { publicClient, serverWallet } from "../config";
+import { GASLESS_MIN_USDC } from "@/lib/network";
 import { launchpad, requireLaunchpad } from "./addresses";
 import { db } from "./db";
 import { votesFor } from "./queries";
@@ -42,6 +43,10 @@ async function confirm(hash: Hex) {
   return receipt;
 }
 
+// Below this a relayed trade costs KOMA more gas than the trade's fee brings in.
+const MIN_RELAY = BigInt(Math.round(GASLESS_MIN_USDC * 1e6));
+const tooSmall = () => new Error(`Gasless trades start at $${GASLESS_MIN_USDC}. For less, send the trade from your own wallet.`);
+
 function knownCurve(curve: string) {
   const row = db().prepare("SELECT id, complete FROM lp_series WHERE lower(curve) = ?").get(curve.toLowerCase()) as { id: number; complete: number } | undefined;
   if (!row) throw new Error("Unknown curve.");
@@ -54,6 +59,7 @@ export type BuyIntent = {
 };
 export async function relayBuy(b: BuyIntent): Promise<Hex> {
   knownCurve(b.curve);
+  if (BigInt(b.usdcIn) < MIN_RELAY) throw tooSmall();
   const { v, r, s, yParity } = parseSignature(b.signature);
   return send({
     address: b.curve,
@@ -71,6 +77,7 @@ export async function relaySwapBuy(b: SwapBuyIntent): Promise<Hex> {
   const row = db().prepare("SELECT graduated FROM lp_series WHERE id = ?").get(b.seriesId) as { graduated: number } | undefined;
   if (!row) throw new Error("Unknown series.");
   if (!row.graduated) throw new Error("This series still trades on its curve.");
+  if (BigInt(b.usdcIn) < MIN_RELAY) throw tooSmall();
   const { v, r, s, yParity } = parseSignature(b.signature);
   return send({
     address: requireLaunchpad().swapper,
@@ -85,6 +92,8 @@ export type SellIntent = {
 };
 export async function relaySell(b: SellIntent): Promise<Hex> {
   knownCurve(b.curve);
+  const [out] = await publicClient.readContract({ address: b.curve, abi: curveAbi, functionName: "quoteSell", args: [BigInt(b.coinIn)] });
+  if (out < MIN_RELAY) throw tooSmall();
   const p = parseSignature(b.permit);
   return send({
     address: b.curve,

@@ -1,5 +1,5 @@
 import { GENRES, cast, styles } from "@/lib/studio-config";
-import { PAGE_OPTIONS, PRICE_PER_PAGE } from "@/lib/network";
+import { EPISODE_PRICE_PER_PAGE, PAGE_OPTIONS, PRICE_PER_PAGE } from "@/lib/network";
 import type { CustomCharacter, Genre, Order } from "@/lib/types";
 
 /** Validates a studio or API order. Shared so the 402 quote and the handler agree. */
@@ -44,4 +44,5 @@ export function parseOrder(body: unknown): { order: Order } | { error: string } 
   return { order: { prompt, title, pages, style, cast: ids, custom: custom.length ? custom : undefined, genre, remixOf, seriesId } };
 }
 
-export const priceFor = (pages: number) => (pages * PRICE_PER_PAGE).toFixed(2);
+export const pagePrice = (episode: boolean) => (episode ? EPISODE_PRICE_PER_PAGE : PRICE_PER_PAGE);
+export const priceFor = (pages: number, episode = false) => (pages * pagePrice(episode)).toFixed(2);

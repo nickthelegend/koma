@@ -1,6 +1,6 @@
 import { formatUnits } from "viem";
 import { CANON_THRESHOLD, TOTAL_SUPPLY, characterAbi, routerAbi } from "@/lib/launchpad/abi";
-import type { Addr, CanonView, ProposalView, SeriesDetail, SeriesSummary, SignedVote, TradeRow } from "@/lib/launchpad/types";
+import type { ActivityEvent, Addr, CanonView, ProposalView, SeriesDetail, SeriesSummary, SignedVote, TradeRow } from "@/lib/launchpad/types";
 import { publicClient } from "../config";
 import { getIssueByToken } from "../store";
 import { launchpad } from "./addresses";
@@ -182,4 +182,68 @@ export async function canonView(seriesId: number): Promise<CanonView> {
     thresholdCoins: CANON_THRESHOLD,
     chainTime: now,
   };
+}
+
+// ——— The board: what happened lately across every series, and each one's recent prices.
+
+/** Price of a fresh curve: the 1,000 virtual USDC against 1B virtual coins it opens with. */
+const LAUNCH_PRICE_PER_COIN = priceOf(BigInt(1_000e6), BigInt(1_000_000_000) * BigInt(1e18));
+
+/**
+ * Latest launches, trades, graduations and finalized canon episodes across all
+ * series, newest first. A read of the index; graduation and canon carry no time
+ * of their own there, so they use the trade that filled the curve and the
+ * moment the vote closed.
+ */
+export function recentActivity(limit = 30): ActivityEvent[] {
+  const rows = db()
+    .prepare(
+      `SELECT * FROM (
+        SELECT CASE WHEN t.is_buy = 1 THEN 'buy' ELSE 'sell' END AS kind, t.series_id AS sid, t.at AS at, t.log_index AS ord,
+               t.tx AS tx, t.trader AS who, t.usdc AS usdc, NULL AS episode, CASE WHEN t.fee = '0' THEN 1 ELSE 0 END AS pool
+          FROM lp_trades t
+        UNION ALL
+        SELECT 'launch', s.id, s.launched_at, -1, s.launch_tx, s.creator, NULL, NULL, 0 FROM lp_series s
+        UNION ALL
+        SELECT 'graduated', s.id, (SELECT MAX(at) FROM lp_trades WHERE series_id = s.id AND fee != '0'), 1000000000, NULL, NULL, s.raised, NULL, 0
+          FROM lp_series s WHERE s.graduated = 1
+        UNION ALL
+        SELECT 'canon', l.series_id, l.ends_at, 1000000000, NULL, NULL, NULL, l.episode, 0 FROM lp_slots l WHERE l.finalized = 1
+      ) e WHERE e.at IS NOT NULL ORDER BY e.at DESC, e.ord DESC LIMIT ?`,
+    )
+    .all(limit) as { kind: ActivityEvent["kind"]; sid: number; at: number; ord: number; tx: string | null; who: Addr | null; usdc: string | null; episode: number | null; pool: number }[];
+  const names = new Map(
+    (db().prepare("SELECT id, name, symbol FROM lp_series").all() as { id: number; name: string; symbol: string }[]).map((s) => [s.id, s]),
+  );
+  return rows.map((r) => ({
+    id: `${r.kind}-${r.sid}-${r.tx ?? r.episode ?? ""}-${r.ord}`,
+    kind: r.kind,
+    seriesId: r.sid,
+    name: names.get(r.sid)?.name ?? `Series #${r.sid}`,
+    symbol: names.get(r.sid)?.symbol.trim() ?? "",
+    at: r.at,
+    tx: r.tx,
+    who: r.who,
+    usdc: r.usdc === null ? null : usd(r.usdc),
+    episode: r.episode,
+    pool: !!r.pool,
+  }));
+}
+
+/**
+ * The last `points` prices of every series, oldest first, for sparklines. A
+ * series with fewer trades than that starts from its launch price.
+ */
+export function sparklines(points = 24): Record<number, number[]> {
+  const rows = db()
+    .prepare(
+      `SELECT series_id, vu, vc FROM (
+        SELECT series_id, vu, vc, at, log_index, ROW_NUMBER() OVER (PARTITION BY series_id ORDER BY at DESC, log_index DESC) AS rn FROM lp_trades
+      ) WHERE rn <= ? ORDER BY series_id, at, log_index`,
+    )
+    .all(points) as { series_id: number; vu: string; vc: string }[];
+  const out: Record<number, number[]> = {};
+  for (const r of rows) (out[r.series_id] ??= []).push(priceOf(r.vu, r.vc));
+  for (const id of Object.keys(out)) if (out[+id].length < points) out[+id].unshift(LAUNCH_PRICE_PER_COIN);
+  return out;
 }

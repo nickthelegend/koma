@@ -2,8 +2,8 @@ import { usd } from "@/lib/format";
 import { KOMA, PRICE_PER_PAGE } from "@/lib/network";
 
 /** The quote, printed as a till receipt: what you pay, to whom, on which chain. */
-export function Receipt({ pages, style, castCount }: { pages: number; style: string; castCount: number }) {
-  const total = pages * PRICE_PER_PAGE;
+export function Receipt({ pages, style, castCount, perPage = PRICE_PER_PAGE }: { pages: number; style: string; castCount: number; perPage?: number }) {
+  const total = pages * perPage;
   const line = (a: React.ReactNode, b: React.ReactNode, strong = false) => (
     <div className={`flex justify-between gap-4 ${strong ? "font-bold" : ""}`}>
       <span>{a}</span>
@@ -15,7 +15,7 @@ export function Receipt({ pages, style, castCount }: { pages: number; style: str
       <p className="text-center font-display text-[26px] uppercase leading-none tracking-wide">KOMA</p>
       <p className="mt-1 text-center text-[11px] text-paper-ink/60">Quote for one new issue</p>
       <div className="my-3 border-t border-dashed border-paper-ink/40" />
-      {line(`${pages} page${pages > 1 ? "s" : ""} × ${usd(PRICE_PER_PAGE)}`, usd(total))}
+      {line(`${pages} page${pages > 1 ? "s" : ""} × ${usd(perPage)}`, usd(total))}
       {line(`Style: ${style}`, "incl.")}
       {line(`Cast: ${castCount ? `${castCount} character${castCount > 1 ? "s" : ""}` : "invented"}`, "incl.")}
       {line("Lettering + mint", "incl.")}

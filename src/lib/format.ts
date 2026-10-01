@@ -86,3 +86,19 @@ export function countdown(untilUnix: number, now = Date.now()) {
   const ss = String(s % 60).padStart(2, "0");
   return h ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
 }
+
+/** Share of a graduation target raised, for labels: "51%", "<1%", "100%". */
+export function progressLabel(raised: number, target: number) {
+  const pct = target > 0 ? (raised / target) * 100 : 0;
+  if (pct >= 100) return "100%";
+  if (pct > 0 && pct < 1) return "<1%";
+  return `${Math.floor(pct)}%`;
+}
+
+/** "3m", "5h", "2d": a series' age from its launch time (unix seconds). */
+export function ageSec(unix: number, nowUnix: number) {
+  const s = Math.max(0, nowUnix - unix);
+  if (s < 3600) return `${Math.max(1, Math.round(s / 60))}m`;
+  if (s < 172_800) return `${Math.round(s / 3600)}h`;
+  return `${Math.round(s / 86_400)}d`;
+}

@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArbMark } from "@/components/icons";
-import { KOMA } from "@/lib/network";
+import { FEE_SPLIT, GASLESS_MIN_USDC, GRADUATION_FEE_PCT, KOMA, LAUNCH_PRICE, TRADE_FEE_PCT } from "@/lib/network";
+import { compact } from "@/lib/format";
+import { CANON_THRESHOLD, DEMO_TARGET_USDC, GRADUATION_TARGET_USDC, TOTAL_SUPPLY } from "@/lib/launchpad/abi";
+import { launchpad } from "@/lib/server/launchpad/addresses";
+import { COIN_NOTE, MAINNET } from "@/components/launchpad/network-note";
 
 const BASE = process.env.KOMA_PUBLIC_URL || "http://localhost:4310";
 
@@ -19,36 +23,43 @@ const STEPS = [
   { t: "Your issue is drawn and minted", d: "Script, panels and lettering are generated; a hash of the finished issue is minted to your wallet." },
 ];
 
-const LAUNCHPAD = [
-  {
-    t: "A series starts with a character",
-    d: "You describe a character and pitch the story, and pay $0.10 over x402. KOMA draws a character sheet and launches the series in one transaction.",
-  },
-  {
-    t: "The character gets its own wallet",
-    d: "It's minted to you as a Character NFT, and the NFT owns a wallet of its own (ERC-6551). Owning the character means owning that wallet.",
-  },
-  {
-    t: "Its coin sits on a USDC curve",
-    d: "One billion coins: 95% are sold by a bonding curve that raises the price as people buy and lowers it as they sell; 5% go to the creator, released over 30 days. The curve's math runs in an Arbitrum Stylus contract written in Rust.",
-  },
-  {
-    t: "Trading costs no gas",
-    d: "You sign a USDC authorization (to buy) or a permit (to sell) and KOMA's relayer sends it. The signature fixes the amount, the minimum you'll accept and a deadline, so the relayer can't change any of them.",
-  },
-  {
-    t: "Holders decide what's canon",
-    d: "Anyone holding a million coins, or the character's owner, can propose the next episode by making a comic in the studio. Holders vote for free with a signature, weighted by what they held when the episode opened. The winner is written on-chain; the rest become alternate universes.",
-  },
-  {
-    t: "Fees flow to characters, up the remix tree",
-    d: "Each trade pays 1%: half to the character's wallet, a fifth to the series it remixed (and theirs, halving each step), the rest to KOMA's treasury. Holders don't receive fees.",
-  },
-  {
-    t: "Graduation into Uniswap v4",
-    d: "When a curve raises its target (5,000 USDC, or 25 for a demo series) it closes, and its USDC and remaining coins become a Uniswap v4 pool at the final price. The liquidity is locked for good.",
-  },
-];
+/** The launchpad, step by step. Numbers come from the shared constants; the engine line says what this network runs. */
+function launchpadSteps(stylus: boolean) {
+  return [
+    {
+      t: "A series starts with a character",
+      d: `You describe a character and pitch the story, and pay $${LAUNCH_PRICE} over x402. KOMA draws a character sheet and launches the series in one transaction.`,
+    },
+    {
+      t: "The character gets its own wallet",
+      d: "It's minted to you as a Character NFT, and the NFT owns a wallet of its own (ERC-6551). Owning the character means owning that wallet.",
+    },
+    {
+      t: "Its coin sits on a USDC curve",
+      d: `${compact(TOTAL_SUPPLY)} coins: 95% are sold by a bonding curve that raises the price as people buy and lowers it as they sell; 5% go to the creator, released over 30 days. ${
+        stylus
+          ? "The curve's math runs in an Arbitrum Stylus contract written in Rust."
+          : `On ${KOMA.label} the curve's math runs as the Solidity reference; on Arbitrum One and Arbitrum Sepolia it runs in an Arbitrum Stylus contract written in Rust.`
+      }`,
+    },
+    {
+      t: "Trading costs no gas",
+      d: `You sign a USDC authorization (to buy) or a permit (to sell) and KOMA's relayer sends it, for trades of $${GASLESS_MIN_USDC} or more. The signature fixes the amount, the minimum you'll accept and a deadline, so the relayer can't change any of them.`,
+    },
+    {
+      t: "Holders decide what's canon",
+      d: `Anyone holding ${CANON_THRESHOLD.toLocaleString("en-US")} coins, or the character's owner, can propose the next episode by making a comic in the studio. Holders vote for free with a signature, weighted by what they held when the episode opened. The winner is written on-chain; the rest become alternate universes.`,
+    },
+    {
+      t: "Fees flow to characters, up the remix tree",
+      d: `Each trade pays ${TRADE_FEE_PCT}%: ${FEE_SPLIT.character}% to the character's wallet, ${FEE_SPLIT.remix}% to the series it remixed (and theirs, halving each step), ${FEE_SPLIT.treasury}% to KOMA's treasury. Holders don't receive fees.`,
+    },
+    {
+      t: "Graduation into Uniswap v4",
+      d: `When a curve raises its target (${GRADUATION_TARGET_USDC.toLocaleString("en-US")} USDC${MAINNET ? "" : `, or ${DEMO_TARGET_USDC} for a demo series`}) it closes, and KOMA takes ${GRADUATION_FEE_PCT}% of the USDC raised, and the rest plus the remaining coins become a Uniswap v4 pool at the final price. The liquidity is locked for good.`,
+    },
+  ];
+}
 
 const CURL = `$ curl -i -X POST ${BASE}/api/comics \\
     -H 'content-type: application/json' \\
@@ -84,6 +95,7 @@ const res = await pay("${BASE}/api/comics", {
 const { jobId } = await res.json();   // then poll /api/jobs/{jobId}`;
 
 export default function How() {
+  const LAUNCHPAD = launchpadSteps(launchpad()?.engine === "stylus");
   return (
     <div className="mx-auto max-w-[1100px] px-4 pt-6 md:px-8 md:pt-10">
       <h1 className="masthead text-[19vw] text-kapow md:text-[clamp(110px,12vw,176px)]">Pay per issue</h1>
@@ -144,7 +156,8 @@ export default function How() {
         <h2 id="launchpad-h" className="masthead text-[16vw] text-kapow md:text-[clamp(84px,9vw,128px)]">The launchpad</h2>
         <p className="mt-4 max-w-[60ch] text-[15.5px] leading-relaxed text-soft">
           Series are comics that keep going. Each one is a character with a coin, and the people holding that coin choose which
-          episodes become the story. It all runs on {KOMA.label}; the coins are testnet collectibles, not investments.
+          episodes become the story. It all runs on {KOMA.label}
+          {MAINNET ? "." : "; here the coins are testnet collectibles."} {COIN_NOTE}
         </p>
         <ol className="mt-8 grid gap-px bg-rule md:grid-cols-2">
           {LAUNCHPAD.map((s, i) => (
