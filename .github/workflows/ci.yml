@@ -10,8 +10,8 @@ jobs:
     name: Web (typecheck, lint, build)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: npm
@@ -27,8 +27,8 @@ jobs:
     name: Contracts (Foundry unit + fuzz)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: npm
@@ -44,7 +44,7 @@ jobs:
     name: Stylus (Rust tests)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       # stylus/rust-toolchain.toml pins the toolchain and the wasm32 target.
       - run: rustup show
         working-directory: stylus

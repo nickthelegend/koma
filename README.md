@@ -1,5 +1,7 @@
 # KOMA
 
+[![CI](https://github.com/nickthelegend/koma/actions/workflows/ci.yml/badge.svg)](https://github.com/nickthelegend/koma/actions/workflows/ci.yml)
+
 **AI comics you own, and characters fans write — on Arbitrum.**
 
 Describe a story and KOMA writes, draws and letters it in about a minute. You pay 10¢ a page in USDC with one signature (x402, no gas) and the issue is minted to you. Then launch its hero as a **series**: a Character NFT with its own wallet, a coin on a USDC bonding curve whose math runs in **Arbitrum Stylus**, and a canon that holders vote on.
