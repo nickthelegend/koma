@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  web:
+    name: Web (typecheck, lint, build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx next typegen && npx tsc --noEmit
+      - run: npm run lint
+      - run: npx next build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+          KOMA_DATA_DIR: /tmp/koma-ci
+
+  contracts:
+    name: Contracts (Foundry unit + fuzz)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      # OpenZeppelin and Uniswap v4 come from node_modules (foundry.toml libs = ["../node_modules"]).
+      - run: npm ci
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: forge build --sizes
+        working-directory: contracts
+      - run: forge test -vv
+        working-directory: contracts
+
+  stylus:
+    name: Stylus (Rust tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # stylus/rust-toolchain.toml pins the toolchain and the wasm32 target.
+      - run: rustup show
+        working-directory: stylus
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: stylus
+      - run: cargo test
+        working-directory: stylus

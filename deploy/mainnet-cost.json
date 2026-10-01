@@ -1,0 +1,212 @@
+{
+  "chainId": 42161,
+  "measuredAt": "2026-10-01",
+  "arbOneBlock": 510588725,
+  "gasPriceWei": 20050000,
+  "gasPriceSource": "cast gas-price -r https://arb1.arbitrum.io/rpc",
+  "method": {
+    "solidity": "script/MeasureMainnetDeploy.s.sol broadcast to a LOCAL anvil fork of Arbitrum One (anvil --fork-url https://arb1.arbitrum.io/rpc --chain-id 42161 --port 18755) from a throwaway unlocked address funded with anvil_setBalance; gasUsed from the receipts (l2ExecutionGas). anvil does not charge Arbitrum's L1 data component, so l1DataGas is NodeInterface(0xC8).gasEstimateL1Component(to, isCreate, calldata) per transaction on arb1. Broadcast records were deleted afterwards.",
+    "stylus": "eth_estimateGas of StylusDeployer(0xcEcba2F1DC234f70Dd89F2041029807F8D03A990).deploy(initcode, initData, 0, 0) on arb1 (initcode from cargo stylus get-initcode), activation data fee from cargo stylus check -e arb1. Nothing was signed or broadcast.",
+    "standIns": "the router initialize / setFactory / transferOwnership rows were measured on the Solidity reference router; the Stylus router's own costs are of the same order."
+  },
+  "solidity": {
+    "steps": [
+      {
+        "step": "router.initialize (Stylus on mainnet; Solidity stand-in measured)",
+        "l2ExecutionGas": 90534,
+        "l1DataGas": 488,
+        "gas": 91022
+      },
+      {
+        "step": "deploy KomaIssues",
+        "l2ExecutionGas": 1623822,
+        "l1DataGas": 9199,
+        "gas": 1633021
+      },
+      {
+        "step": "deploy CharacterNFT",
+        "l2ExecutionGas": 1736483,
+        "l1DataGas": 9789,
+        "gas": 1746272
+      },
+      {
+        "step": "deploy CanonRegistry",
+        "l2ExecutionGas": 1163111,
+        "l1DataGas": 6450,
+        "gas": 1169561
+      },
+      {
+        "step": "deploy (CREATE2, mined hook address) Graduator",
+        "l2ExecutionGas": 1992466,
+        "l1DataGas": 11371,
+        "gas": 2003837
+      },
+      {
+        "step": "deploy CurveDeployer",
+        "l2ExecutionGas": 2815134,
+        "l1DataGas": 13921,
+        "gas": 2829055
+      },
+      {
+        "step": "deploy CoinDeployer",
+        "l2ExecutionGas": 3248985,
+        "l1DataGas": 15540,
+        "gas": 3264525
+      },
+      {
+        "step": "deploy SeriesFactory",
+        "l2ExecutionGas": 1307159,
+        "l1DataGas": 7402,
+        "gas": 1314561
+      },
+      {
+        "step": "deploy KomaSwapper",
+        "l2ExecutionGas": 1174819,
+        "l1DataGas": 6456,
+        "gas": 1181275
+      },
+      {
+        "step": "CharacterNFT.grantRole",
+        "l2ExecutionGas": 51410,
+        "l1DataGas": 422,
+        "gas": 51832
+      },
+      {
+        "step": "CanonRegistry.grantRole",
+        "l2ExecutionGas": 51447,
+        "l1DataGas": 423,
+        "gas": 51870
+      },
+      {
+        "step": "CanonRegistry.grantRole",
+        "l2ExecutionGas": 51243,
+        "l1DataGas": 423,
+        "gas": 51666
+      },
+      {
+        "step": "Graduator.grantRole",
+        "l2ExecutionGas": 51448,
+        "l1DataGas": 423,
+        "gas": 51871
+      },
+      {
+        "step": "SeriesFactory.grantRole",
+        "l2ExecutionGas": 51200,
+        "l1DataGas": 422,
+        "gas": 51622
+      },
+      {
+        "step": "router.setFactory (Stylus on mainnet; Solidity stand-in measured)",
+        "l2ExecutionGas": 47367,
+        "l1DataGas": 357,
+        "gas": 47724
+      },
+      {
+        "step": "router.transferOwnership (Stylus on mainnet; Solidity stand-in measured)",
+        "l2ExecutionGas": 28445,
+        "l1DataGas": 351,
+        "gas": 28796
+      },
+      {
+        "step": "CharacterNFT.grantRole",
+        "l2ExecutionGas": 50822,
+        "l1DataGas": 422,
+        "gas": 51244
+      },
+      {
+        "step": "CharacterNFT.renounceRole",
+        "l2ExecutionGas": 24405,
+        "l1DataGas": 423,
+        "gas": 24828
+      },
+      {
+        "step": "CanonRegistry.grantRole",
+        "l2ExecutionGas": 50859,
+        "l1DataGas": 423,
+        "gas": 51282
+      },
+      {
+        "step": "CanonRegistry.renounceRole",
+        "l2ExecutionGas": 24442,
+        "l1DataGas": 423,
+        "gas": 24865
+      },
+      {
+        "step": "Graduator.grantRole",
+        "l2ExecutionGas": 50860,
+        "l1DataGas": 423,
+        "gas": 51283
+      },
+      {
+        "step": "Graduator.renounceRole",
+        "l2ExecutionGas": 24376,
+        "l1DataGas": 423,
+        "gas": 24799
+      },
+      {
+        "step": "SeriesFactory.grantRole",
+        "l2ExecutionGas": 50816,
+        "l1DataGas": 423,
+        "gas": 51239
+      },
+      {
+        "step": "SeriesFactory.renounceRole",
+        "l2ExecutionGas": 24399,
+        "l1DataGas": 423,
+        "gas": 24822
+      }
+    ],
+    "totalGas": 15872872,
+    "totalEth": 0.000318251
+  },
+  "stylus": {
+    "steps": [
+      {
+        "step": "curve-math deploy + activate (StylusDeployer, one tx)",
+        "gas": 4835972,
+        "activationDataFeeWei": 65000000000000,
+        "dataFeeSentWithDefault20PctBumpWei": 78000000000000,
+        "source": "eth_estimateGas on https://arb1.arbitrum.io/rpc (no signing) + cargo stylus check"
+      },
+      {
+        "step": "royalty-router deploy + activate + constructor (StylusDeployer, one tx)",
+        "gas": 5685782,
+        "activationDataFeeWei": 76000000000000,
+        "dataFeeSentWithDefault20PctBumpWei": 91000000000000,
+        "source": "eth_estimateGas on https://arb1.arbitrum.io/rpc (no signing) + cargo stylus check"
+      }
+    ],
+    "totalGas": 10521754,
+    "activationDataFeesWei": 141000000000000,
+    "totalEth": 0.000351961,
+    "totalEthWithDefaultFeeBump": 0.000379961
+  },
+  "cacheManager": {
+    "address": "0x51dEDBD2f190E0696AFbEE5E60bFdE96d86464ec",
+    "cacheSizeBytes": 536870912,
+    "queueSizeBytes": 139504640,
+    "minBidWei": 0,
+    "note": "cache is ~26% full so the minimum bid is 0 wei today; bids decay over time and are paid in ETH (--cache-bid). placeBid gas could not be estimated before the programs exist (expect ~1e5 gas each)."
+  },
+  "measurementStandIns": [
+    {
+      "step": "deploy CurveMathReference",
+      "l2ExecutionGas": 210356,
+      "l1DataGas": 1514,
+      "gas": 211870,
+      "note": "measurement stand-in for the Stylus program; NOT part of the mainnet deploy"
+    },
+    {
+      "step": "deploy RoyaltyRouterReference",
+      "l2ExecutionGas": 674757,
+      "l1DataGas": 3917,
+      "gas": 678674,
+      "note": "measurement stand-in for the Stylus program; NOT part of the mainnet deploy"
+    }
+  ],
+  "grandTotal": {
+    "gas": 26394626,
+    "eth": 0.000670212,
+    "ethWithDefaultFeeBumpAnd2xGasPriceHeadroom": 0.001227424
+  }
+}

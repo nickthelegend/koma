@@ -86,6 +86,8 @@ Decisions from the grilling session (Q1–Q10):
 
 Also documented (not codesize-checked): Universal Router `0xefd1d4bd4cf1e86da286bb4cb1b8bced9c10ba47`, StateView `0x9d467fa9062b6e9b1a46e26007ad82db116c67cb`, Quoter `0x7de51022d70a725b508085468052e25e22b5c4c9`.
 
+> **Economics update, 2026-10-01:** 1.5% curve fee split 40/20/40 (character / remix tree / KOMA), 5% graduation fee, $1 launch, 30¢/page episodes, comics stay 10¢/page, $3 minimum for gasless relays. See README → "How KOMA makes money" and `contracts/LAUNCHPAD_SPEC.md`.
+
 ## 5. Final spec
 
 ### 5.1 Contracts

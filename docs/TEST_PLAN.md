@@ -138,6 +138,23 @@ Live site: https://koma-arbitrum.vercel.app (Vercel front door) → Railway `web
 | H11 | Phone (375px) | Explorer, launch, series page, trade widget and canon board fit with no horizontal scroll. |
 | H12 | Console/network sweep | Every launchpad page: zero console errors, zero unexpected failed requests. |
 
+## I. Added 2026-10-01 (home, launchpad board, pricing, mainnet prep)
+
+| ID | Item | Correct means |
+|---|---|---|
+| I1 | Home cover hero | `/` opens on the comic-cover hero: price box showing the configured page price (10¢), "No. N" equal to the number of minted issues, the most-read (or latest) issue's opening panel as art with a credit line naming it, headline, "Make a comic" → `/create`, "Launch a series" → `/launch`, three cover lines linking to `/launch` and `/series`; fits one screen at 1440×900; no overlap or horizontal scroll at 375px. |
+| I2 | Launchpad board header | `/series` features the series closest to graduation (raised/target and % equal to the index), with Trade / Read canon links; the live tape lists real indexed events (launch, buy, sell, graduation, canon) newest first. |
+| I3 | Board tabs and search | `?tab=new|graduating|graduated` and `?q=` filter exactly; counts on the tabs equal the filtered lists; unknown query shows an empty state with a launch CTA. |
+| I4 | Series without art | A series launched without a character sheet renders a typographic plate (no broken image, no fake art). |
+| I5 | Built on Arbitrum panel | On `/launch` and `/s/[id]` it names the engine actually deployed (`/api/status` → `launchpad.engine`) and shows the real curve-math, royalty-router, Character NFT and ERC-6551 registry addresses. |
+| I6 | Character earnings withdrawal | The Character NFT owner sees the character account's USDC balance and "Withdraw to my wallet"; clicking sends one wallet transaction that moves exactly that balance to the owner; non-owners see no button. |
+| I7 | Pricing shown | Launch page and its pay button say $1 / 1.00 USDC; studio in episode mode prices pages at 30¢; normal studio at 10¢; series page states the 1.5% fee split 40/20/40 and the 5% graduation fee. |
+| I8 | $3 gasless floor (UI) | A $2 buy shows "Gasless from $3" (disabled) and the wallet route; a $3 buy goes through with one signature. |
+| I9 | fal unavailable | While fal is locked, `/api/status` → `ai.ok: false`, every quote (comic, episode, launch) answers 503 "No payment was taken", and the studio/launch sheets show that message — no USDC moves. |
+| I10 | Mainnet preflight | `node scripts/mainnet-preflight.mjs` against the local deployment exits non-zero and flags exactly the non-mainnet settings (engine, EOA admin/treasury, relayer admin, fal). |
+| I11 | Fee economics on chain | `.data/econ-check.mjs` 5/5: 1.5% fee split 40/20/40, remix split, $3 relay floor, 5% graduation fee, a gasless buy through the Graduator-hooked v4 pool. |
+| I12 | Canon voting on chain (no fal) | With an existing minted issue proposed by the relayer, a holder votes from the browser with one free signature at snapshot weight, the countdown follows chain time, and the keeper finalizes it on chain when the window closes; the canon timeline shows it. |
+
 ## Results — 2026-09-29, full run 3 (after the chat studio)
 
 Chain: Arbitrum Sepolia fork (chain 421614, real Circle USDC contract), persisted. Browser items in Claude in Chrome; items that need a visible, focused page (C6 scroll, C18 clipboard, C19/D12 phone) in headless Google Chrome via Playwright with real input. Wallets are fresh keys signing real EIP-712 authorizations through an injected EIP-1193 provider. Every item below was re-run after the last code change.
@@ -233,3 +250,78 @@ Local runs: KOMA fork (chain 421614, launchpad on the Solidity reference engine 
 New gap found and fixed during the run: with fal locked, the site still quoted and took payments for jobs that could only fail. A cached fal health probe (a free, invalid request: a working account gets a validation error, a locked one 403) now makes `/api/comics` and `/api/series` answer 503 "No payment was taken" before quoting, and `/api/status` reports `ai`. Verified locally and live.
 
 Open, needing the owner: Arbitrum Sepolia ETH (F6, E3/A4), a fal.ai top-up (live G8–G12, H9's browser remix launch), a Pimlico API key (G13 forwarding).
+
+## Results — 2026-10-01, pricing and fee economics run
+
+New economics (owner's choice, "keep the 10¢ hook"): comics 10¢/page, series episodes 30¢/page, launch $1, curve fee 1.5% split 40% character / 20% remix tree / 40% KOMA, 5% of the USDC raised to KOMA at graduation, KOMA relays trades gaslessly from $3.
+
+| Check | Result | Notes |
+| --- | --- | --- |
+| Solidity | PASS | 132 unit + fuzz (new: 40/20/40 split with 0–10 ancestors, graduation fee fuzz across every allowed target, Solidity router replays all 2,002 Stylus vectors). Fork suite 3/3 against real Arbitrum Sepolia. |
+| Stylus | PASS | `cargo test` 34/34; devnode: Stylus = Solidity on 10,192/10,192 curve outputs and 21/21 reverts; router flow ALL PASS with the new split (425,000 / 100,000 / 50,000 / 25,000 / 400,000). |
+| Fee split on chain | PASS | $10 gasless buy: character +0.09, treasury +0.06 (1.5%, no parent). Remix: parent +0.015, child +0.075, treasury +0.06. |
+| Graduation fee | PASS | Demo curve at 25 USDC: `GraduationFee` 1.25 to the treasury, `PoolCreated` 23.75 USDC, graduated by the keeper. |
+| $3 relay floor | PASS | Relayer refuses a $2 gasless buy and sells worth < $3 ("Gasless trades start at $3"), nothing moves; the widget shows "Gasless from $3" and offers the wallet path; a $3 buy from the browser goes through with one signature. |
+| UI copy | PASS | Launch page: $1, 1.5% split 40/20/40, 5% graduation fee; series page fee text and "where the fees went" use the same constants; studio receipts price episodes at 30¢/page. |
+| Episode / launch quotes over x402 | UNTESTED | fal is locked (`TOP_UP`), and the server correctly refuses to quote while it is. Needs a fal top-up. |
+
+**FAIL first**, fixed during the run:
+- **Target cap.** The maximum graduation target (19,000 USDC) sold every curve coin, so graduation reverted and the USDC was stranded. The curve now keeps at least 10M coins unsold, which caps targets at 15,666 USDC.
+- **Stale index after a redeploy.** A new launchpad deployment restarts series ids at 1, so the new series collided with the previous deployment's rows and the relayer answered "Unknown curve". The index now tracks which deployment it follows; when the factory changes it clears the old deployment's rows and rewinds the cursor to the deploy block.
+
+## Results — 2026-10-01, pre-mainnet audit and hardening
+
+Full findings: `contracts/AUDIT.md`. Runbook: `deploy/MAINNET.md`. Cost: `deploy/mainnet-cost.json`.
+
+| Check | Result | Notes |
+| --- | --- | --- |
+| Audit | DONE | H-1 pool squatting could block graduation forever → Graduator is the pool hook (only it can create series pools). M-1 a USDC-blacklisted recipient froze trading → fees/treasury payouts are parked and flushable. M-2 deploy defaults → mainnet guards (Stylus engine, Safe admin, keystore signer, deployer renounces). M-3 Stylus program expiry → monitoring + deferred routing. L-1…L-4 fixed. Fee is a compile-time 150 bps constant; treasury set once; withdrawals proven by fork test. |
+| No mocks | PASS | Unit tests etch the real Circle USDC (proxy + FiatTokenV2_2) and real Tokenbound (registry, proxy, AccountV3 + dependencies) from Arbitrum One. `grep -r Mock contracts/` is empty. |
+| Solidity / fork / Stylus | PASS | 159 unit+fuzz, 5 fork tests (Arbitrum Sepolia: USDC, Tokenbound, Uniswap v4, character withdrawal, Safe as admin/treasury), 36 `cargo test`, Nitro devnode differential ALL PASS. |
+| Hardened contracts in the app | PASS | Local redeploy; app ABIs match artifacts (functions, events, errors); economics check 5/5 incl. a gasless buy through a Graduator-hooked v4 pool priced by the v4 Quoter. |
+| Character earnings withdrawal (browser) | PASS | Owner clicked "Withdraw to my wallet": character account 0.132 → 0 USDC, owner +0.132 exactly, one wallet transaction; non-owner `execute` reverts (`NotAuthorized`). |
+| Launchpad UI | PASS | Board, series and launch pages at 1440 and 375 px, no console errors, mainnet-aware copy. |
+| Mainnet preflight script | PASS | `scripts/mainnet-preflight.mjs` against the local deployment flags exactly the non-mainnet settings (Solidity engine, EOA admin/treasury, relayer admin, fal locked). |
+| Mainnet deploy | NOT STARTED (gated) | No deployer configured; owner must fund (see deploy/MAINNET.md §2–3). |
+
+## Results — 2026-10-01, full run 4 (every item, current code)
+
+Browser: the app's built-in Chromium (Claude in Chrome was disconnected after a machine restart), real pages on the local fork, an injected test wallet (the project's local test key, localhost only). **fal.ai is locked (`User is locked. Reason: TOP_UP.`)**, so every item that needs AI generation is UNTESTED — not passed.
+
+| ID | Result | Notes |
+|---|---|---|
+| A1, A2, A3, A5 | PASS | Chain + Circle USDC; 159 unit + 5 fork + 36 Rust tests; SQLite persisted across restarts; `grep -r Mock` empty. |
+| A4 | BLOCKED | Public Arbitrum Sepolia deploy needs testnet ETH. |
+| B1, B2, B8, B9, B11, B12, B13 | PASS | **FAIL first** (harness): the API suite crashed when quotes were refused (fal down) → fal-dependent checks now report UNTESTED; B12 built its requirements from a studio quote → now builds them from `/api/status`, so the facilitator is tested on its own (real settlement). B13 run on a production build with no env: status lists the 3 missing settings, comics/series POST → 503 naming them, one "studio is offline" banner, paying disabled. |
+| B15 (new) | PASS | fal unavailable → quote 503 "No payment was taken", no PAYMENT-REQUIRED. |
+| B3, B4, B5, B6, B7, B10, B14 | UNTESTED | Need a quote/paid generation (fal). |
+| C1–C7, C15–C20 | PASS | Rack = 29 DB issues newest first; genre filter exact (12 Sci-fi); search + empty state; issue page hash/payment = on-chain; reader +1 read exactly; tx pages decode USDC transfer / IssueMinted with hash match, unknown → 404; shelf = the wallet's 12 issues exactly; receipts totals = DB (29 / 3.50); `/how` anchors; share: real click → "Copied", X/Farcaster links carry the URL; 32 pages fit 375px; 32 pages 0 console errors / 0 failed requests. C3 on a production build with an empty data dir: "No. 0", no art, no ticker, no series strip, "Issue #1 is yours", receipts zeros. |
+| C8 | PASS (without paying) | Genre preselect, starters fill the prompt, style/length update the receipt (4 × $0.10 = $0.40), cast toggles ("1 character"), custom character added, remix banner. Paying is fal-gated. |
+| C12 | PASS | No provider → "No browser wallet found. Install MetaMask, Rabby or Coinbase Wallet." |
+| C9, C10, C11, C13, C14 | UNTESTED | Need a quote/paid generation (fal). |
+| D1 | PASS (fal-down variant) | Greeting and starters render; composer and starters disabled with "The editor is offline right now". |
+| D11 | PASS | Empty message 400; 41st request from one visitor 429; global hourly cap → "The editor is swamped". |
+| D12 | PASS | Layout fits 375px. |
+| D2–D10 | UNTESTED | The editor itself is fal. |
+| E1, E4 | PASS | Live, read-only: ready on 4216141 with the launchpad, payments refused while fal is down; `/api/rpc` refuses anvil_/evm_/debug_/eth_sendTransaction/eth_accounts, also inside batches. |
+| E2 | PARTIAL | Live pages answer 200; live console not re-swept this run. The live site serves the build before today's audit (not redeployed, per instruction). |
+| E3 | BLOCKED | Testnet ETH. |
+| E5, E6, E8 | NOT RE-RUN | Live site not redeployed (instruction: don't deploy). Last PASS 2026-09-29. |
+| E7 | UNTESTED | fal. |
+| F1–F5, F7, F8 | PASS | Re-run today (unit, fork, cargo, devnode differential by the audit run, deploy, bench, index rebuild + deployment reset). |
+| F6 | BLOCKED | Testnet ETH. |
+| G1, G2, G5, G6, G7, G9, G10, G11, G12 | PASS | `npm run check:economics` 9/9 on the hardened contracts (fee 40/20/40, remix split, $3 floor, 5% graduation fee, hooked-pool trade, slippage + tamper refusal, gasless sell, anti-snipe, canon proposal); G9 voted from the browser and finalized by the keeper on chain. |
+| G3, G4, G8 | UNTESTED | Launch / episode generation need fal. |
+| G13 | PARTIAL | 503 without a key verified; forwarding to Pimlico untested (no API key exists). |
+| H1, H3, H4, H5, H6, H8, H10, H11, H12 | PASS | Board vs index; series page = on-chain `state()` ($4.90 of $25, $0.0₅101, $1.01K); browser buy (1 signature) and sell (2 signatures, MAX $5.82); $3 floor; graduated pool trading; vote + keeper finalize; nav; phone; console. |
+| H2, H7 | UNTESTED | Launch / propose from the studio need fal. |
+| H9 | PARTIAL | "Remix of …" banner and remix royalties on chain verified; a paid remix launch from the browser needs fal. |
+| I1–I12 | PASS | Cover hero vs data (No. 29 = 29 issues, 10¢, most-read art + credit); board featured/tape; tabs + search exact; no-art plates; Built-on-Arbitrum panel names the real engine and addresses; withdrawal (owner: 0.176543 USDC moved, Transfer event; non-owner: no button); prices ($1 launch, 30¢/10¢ pages, 1.5% split, 5% graduation fee); $3 floor; fal-down guard; mainnet preflight; economics; canon vote. |
+
+**FAIL first, fixed this run:**
+- The studios only learned fal was down after a quote request returned 503, which logs a failed request. They now read `/api/status` and show "The AI artist is offline" with paying, the chat composer and the starters disabled; no quote request is sent at all (verified: 0 quote requests on 4 pages).
+- On an unconfigured server both the "studio offline" and "AI offline" banners appeared; the AI banner now shows only on a configured server.
+- API harness: fal-dependent checks report UNTESTED instead of crashing; the facilitator check no longer depends on a studio quote.
+- Repo: `npm run art` pointed at a script that doesn't exist (removed); the economics check moved into `scripts/check-economics.mjs` with npm scripts for every suite; CI workflow added and its web job verified on a clean copy (`npm ci`, typecheck, lint, production build).
+
+**Totals (104 planned items):** 68 PASS (+ the new B15), 3 PARTIAL, 27 UNTESTED (fal locked), 3 BLOCKED (testnet ETH), 3 NOT RE-RUN (live not redeployed). No mocks or stubs in app or contract code; 0 console errors and 0 failed requests on every page tested.

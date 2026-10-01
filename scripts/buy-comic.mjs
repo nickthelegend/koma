@@ -17,7 +17,7 @@ const account = privateKeyToAccount(key);
 const status = await (await fetch(`${base}/api/status`)).json();
 const client = x402Client.fromConfig({
   schemes: [{ network: status.caip, client: new ExactEvmScheme(account) }],
-  spendControls: { allowedAssets: [{ network: status.caip, asset: status.usdc, maxAmountPerPayment: "600000" }] },
+  spendControls: { allowedAssets: [{ network: status.caip, asset: status.usdc, maxAmountPerPayment: "1800000" }] },
 });
 const pay = wrapFetchWithPayment(fetch, client);
 

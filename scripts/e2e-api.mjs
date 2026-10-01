@@ -49,13 +49,23 @@ function check(id, name, ok, detail = "") {
   console.log(`${ok ? "PASS" : "FAIL"} ${id} ${name}${detail ? ` — ${detail}` : ""}`);
 }
 const run = (id) => !only || only.includes(id);
+// While fal is unavailable the server refuses to quote (so it never takes a payment it can't draw for).
+// Checks that need a quote or a paid generation are then reported UNTESTED, not passed or failed.
+const aiDown = status.ai && status.ai.ok === false;
+const untested = [];
+function skipPaid(id, name) {
+  if (!aiDown) return false;
+  untested.push(id);
+  console.log(`UNTESTED ${id} ${name} — fal unavailable (${status.ai.reason})`);
+  return true;
+}
 const post = (body, headers = {}) =>
   fetch(`${BASE}/api/comics`, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: typeof body === "string" ? body : JSON.stringify(body) });
 const httpClient = (key) =>
   new x402HTTPClient(
     x402Client.fromConfig({
       schemes: [{ network: status.caip, client: new ExactEvmScheme(privateKeyToAccount(key)) }],
-      spendControls: { allowedAssets: [{ network: status.caip, asset: status.usdc, maxAmountPerPayment: "600000" }] },
+      spendControls: { allowedAssets: [{ network: status.caip, asset: status.usdc, maxAmountPerPayment: "1800000" }] },
     }),
   );
 
@@ -104,7 +114,7 @@ if (run("B2")) {
 }
 
 // ——— B3 quotes ———
-if (run("B3")) {
+if (run("B3") && !skipPaid("B3", "402 quotes")) {
   let all = true;
   for (const pages of [1, 2, 4, 6]) {
     const { res, required } = await quote({ prompt: "A perfectly fine story idea here.", pages });
@@ -127,7 +137,7 @@ if (run("B3")) {
 }
 
 // ——— B7 payer without USDC ———
-if (run("B7")) {
+if (run("B7") && !skipPaid("B7", "0-USDC payer")) {
   const order = { prompt: "A lighthouse keeper befriends a lonely sea serpent.", pages: 1 };
   const { required } = await quote(order);
   const h = httpClient(KEYS.empty);
@@ -140,7 +150,7 @@ if (run("B7")) {
 }
 
 // ——— B5 tampered price ———
-if (run("B5")) {
+if (run("B5") && !skipPaid("B5", "tampered price")) {
   const small = { prompt: "A tiny robot learns to bake bread for its village.", pages: 1 };
   const { required } = await quote(small);
   const h = httpClient(KEYS.agent);
@@ -154,7 +164,7 @@ if (run("B5")) {
 }
 
 // ——— B4 paid order + B6 replay + B10 metadata ———
-if (run("B4")) {
+if (run("B4") && !skipPaid("B4", "paid order, B4b genre/cast, B6 replay, B10 token metadata")) {
   const order = {
     prompt: "A retired superhero runs a tiny noodle stand, until her old nemesis orders the special.",
     pages: 1,
@@ -211,6 +221,12 @@ if (run("B4")) {
 }
 
 // ——— B8 jobs lookup ———
+if (aiDown && run("B15")) {
+  const res = await post({ prompt: "A perfectly fine story idea here.", pages: 1 });
+  const j = await res.json().catch(() => ({}));
+  check("B15", "fal unavailable → quote refused with 503, no PAYMENT-REQUIRED, says no payment was taken", res.status === 503 && !res.headers.get("PAYMENT-REQUIRED") && /No payment was taken/.test(j.error ?? ""), `${res.status} ${j.error}`);
+}
+
 if (run("B8")) {
   const a = await fetch(`${BASE}/api/jobs/ffffffffff`);
   const b = await fetch(`${BASE}/api/jobs/..%2Fx`);
@@ -247,7 +263,13 @@ if (run("B11")) {
 if (run("B12")) {
   const sup = await (await fetch(`${BASE}/api/facilitator/supported`)).json();
   const hasKind = sup.kinds.some((k) => k.x402Version === 2 && k.scheme === "exact" && k.network === status.caip);
-  const { required } = await quote({ prompt: "A facilitator test story, nothing more.", pages: 1 });
+  // The facilitator is independent of the studio: build standard x402 v2 requirements for a 0.10 USDC
+  // payment to KOMA's pay-to address straight from /api/status (no studio quote needed).
+  const required = {
+    x402Version: 2,
+    resource: { url: `${BASE}/facilitator-test`, description: "facilitator check", mimeType: "application/json" },
+    accepts: [{ scheme: "exact", network: status.caip, amount: "100000", asset: USDC, payTo: PAY_TO, maxTimeoutSeconds: 300, extra: { name: "USD Coin", version: "2" } }],
+  };
   const h = httpClient(KEYS.agent);
   const payload = await h.createPaymentPayload(required);
   const reqs = required.accepts[0];
@@ -268,5 +290,5 @@ if (run("B12")) {
 }
 
 const failed = results.filter((r) => !r.ok);
-console.log(`\n${results.length - failed.length}/${results.length} passed`);
+console.log(`\n${results.length - failed.length}/${results.length} passed${untested.length ? `, ${untested.length} untested (${untested.join(", ")})` : ""}`);
 process.exit(failed.length ? 1 : 0);
