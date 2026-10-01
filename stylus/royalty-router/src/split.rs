@@ -2,8 +2,8 @@
 //! test-vector generator.
 //!
 //! Spec (`contracts/LAUNCHPAD_SPEC.md`, `IRoyaltyRouter`):
-//! - `char     = amount * 5000 / 10000`
-//! - `treasury = amount * 3000 / 10000`
+//! - `char     = amount * 4000 / 10000`
+//! - `treasury = amount * 4000 / 10000`
 //! - `pool     = amount - char - treasury`
 //! - ancestor at depth `i` (1 = parent) gets `pool >> i`, for i = 1..=depth, depth <= 8
 //! - the character gets `char + (pool - sum(ancestors))`, so the total paid is exactly `amount`.
@@ -11,23 +11,23 @@
 use alloy_primitives::U256;
 
 pub const BPS: u64 = 10_000;
-pub const CHARACTER_BPS: u64 = 5_000;
-pub const TREASURY_BPS: u64 = 3_000;
+pub const CHARACTER_BPS: u64 = 4_000;
+pub const TREASURY_BPS: u64 = 4_000;
 pub const MAX_DEPTH: usize = 8;
 
-/// Largest `amount` for which `amount * 5000` fits in 256 bits:
-/// `(2^256 - 1) / 5000`. Larger amounts revert, exactly like the Solidity
-/// 0.8 expression `amount * 5000 / 10000` would.
+/// Largest `amount` for which `amount * 4000` fits in 256 bits:
+/// `(2^256 - 1) / 4000`. Larger amounts revert, exactly like the Solidity
+/// 0.8 expression `amount * 4000 / 10000` would.
 pub const MAX_AMOUNT: U256 = U256::from_limbs([
-    10684354167492572295,
-    5371691874264221430,
-    5961987684622927082,
-    3689348814741910,
+    4132070672510939561,
+    15937986879685052596,
+    16675856642633434660,
+    4611686018427387,
 ]);
 
 /// `x / d` for a small divisor (`d < 2^32`), by schoolbook long division over
 /// 32-bit digits so every step is a native 64-bit `div`. Used instead of
-/// ruint's generic `div_rem` (~4.5 KB of WASM) since the only divisor is 10.
+/// ruint's generic `div_rem` (~4.5 KB of WASM) since the only divisor is 5.
 #[inline]
 fn div_small(x: U256, d: u32) -> U256 {
     let limbs = x.as_limbs();
@@ -46,19 +46,19 @@ fn div_small(x: U256, d: u32) -> U256 {
     U256::from_limbs(out)
 }
 
-/// `(char, treasury, pool)` with `char = amount*5000/10000` and
-/// `treasury = amount*3000/10000` (floor). `None` if `amount > MAX_AMOUNT`.
+/// `(char, treasury, pool)` with `char = treasury = amount*4000/10000`
+/// (floor). `None` if `amount > MAX_AMOUNT`.
 ///
-/// For every amount <= MAX_AMOUNT: `amount*5000/10000 == amount >> 1` and
-/// `amount*3000/10000 == (amount*3)/10`; both identities are asserted against
-/// the literal spec expression in the unit tests.
+/// For every amount <= MAX_AMOUNT: `amount*4000/10000 == (amount*2)/5`
+/// (`amount*2` cannot overflow there); the identity is asserted against the
+/// literal spec expression in the unit tests.
 #[inline]
 pub fn base_split(amount: U256) -> Option<(U256, U256, U256)> {
     if amount > MAX_AMOUNT {
         return None;
     }
-    let character = amount >> 1;
-    let treasury = div_small(amount * U256::from(3u8), 10);
+    let character = div_small(amount << 1, 5);
+    let treasury = character;
     Some((character, treasury, amount - character - treasury))
 }
 

@@ -7,14 +7,11 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
-import {IUnlockCallback} from "@uniswap/v4-core/src/interfaces/callback/IUnlockCallback.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
+import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
-import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
-import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
-import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import {FullMath} from "@uniswap/v4-core/src/libraries/FullMath.sol";
 import {LiquidityAmounts} from "@uniswap/v4-periphery/src/libraries/LiquidityAmounts.sol";
@@ -26,19 +23,25 @@ import {LaunchpadConstants as C} from "./libraries/LaunchpadConstants.sol";
 /// @title KOMA graduator
 /// @notice Turns a completed curve into a Uniswap v4 USDC/coin pool (fee 0.3%, tick spacing 60, no hooks)
 ///         priced at the curve's final price `vU / vC`. Liquidity is full-range and its position NFT is sent
-///         to 0x…dEaD, so the pool can never be rugged. Whatever does not fit at that price is not dumped:
-///         surplus USDC goes to the treasury and surplus coins are burned.
-/// @dev Pool squatting: the pool key is predictable, so anyone can `initialize` it first at a bad price.
-///      SeriesCoin refuses transfers into the PoolManager until graduation, so a squatted pool can hold at
-///      most USDC. Before minting, the graduator swaps the pool back to the target price: through empty
-///      ticks that is free, and through squatter USDC it only ever sells coins at or above the curve price.
-contract Graduator is AccessControl, IUnlockCallback {
+///         to 0x…dEaD, so the pool can never be rugged. First a graduation fee of 5% of the USDC raised
+///         (`GRADUATION_FEE_BPS`) goes to the treasury; the pool is built from the rest. Whatever does not fit
+///         at that price is not dumped: surplus USDC goes to the treasury and surplus coins are burned.
+/// @dev Pool squatting: the pool key is predictable, so without protection anyone could `initialize` it first
+///      at a bad price and then park liquidity that makes the price correction at graduation revert or run out
+///      of gas (AUDIT.md H-1). The Graduator is therefore the pool's hook: its address carries only the
+///      `BEFORE_INITIALIZE` flag and `beforeInitialize` rejects every caller, so only the Graduator itself
+///      (whose own calls skip the hook, see v4 `Hooks.noSelfCall`) can create a series pool. Until then the
+///      PoolManager refuses swaps, liquidity and donations on the key. Deploy it with CREATE2 at a mined
+///      address (`script/DeployLaunchpad.s.sol`); the constructor reverts at any other address.
+///      Treasury payments never block graduation: if the USDC transfer fails (e.g. the treasury is
+///      blacklisted) the amount is kept in `treasuryOwed` and anyone can retry with `flushTreasury()`.
+contract Graduator is AccessControl {
     using SafeERC20 for IERC20;
-    using StateLibrary for IPoolManager;
 
     bytes32 public constant FACTORY_ROLE = keccak256("FACTORY_ROLE");
 
     uint24 public constant POOL_FEE = 3000;
+    uint256 public constant GRADUATION_FEE_BPS = C.GRADUATION_FEE_BPS;
     int24 public constant TICK_SPACING = 60;
     // forge-lint: disable-next-line(divide-before-multiply)
     int24 internal constant TICK_LOWER = (TickMath.MIN_TICK / TICK_SPACING) * TICK_SPACING;
@@ -53,6 +56,8 @@ contract Graduator is AccessControl, IUnlockCallback {
 
     mapping(uint256 seriesId => address) public curveOf;
     mapping(uint256 seriesId => PoolKey) private _poolKeys;
+    /// @notice Treasury USDC whose transfer failed (held here, excluded from every pool); see `flushTreasury`.
+    uint256 public treasuryOwed;
 
     event CurveRegistered(uint256 indexed seriesId, address curve);
     event PoolCreated(
@@ -63,13 +68,17 @@ contract Graduator is AccessControl, IUnlockCallback {
         uint256 coinToPool,
         uint256 liquidity
     );
-    event PoolPriceCorrected(uint256 indexed seriesId, uint160 fromSqrtPriceX96, uint160 toSqrtPriceX96);
+    /// @notice The treasury's cut of the USDC raised, taken before the pool is sized.
+    event GraduationFee(uint256 indexed seriesId, uint256 usdcFee);
+    event TreasuryPaymentDeferred(uint256 amount);
+    event TreasuryFlushed(uint256 amount);
 
     error ZeroAddress();
     error Unauthorized(address caller);
     error CurveAlreadyRegistered(uint256 seriesId);
     error AlreadyGraduated(uint256 seriesId);
     error PriceOutOfRange(uint160 sqrtPriceX96);
+    error NothingOwed();
 
     constructor(
         address admin,
@@ -83,6 +92,8 @@ contract Graduator is AccessControl, IUnlockCallback {
             poolManager_ == address(0) || positionManager_ == address(0) || permit2_ == address(0)
                 || usdc_ == address(0) || treasury_ == address(0)
         ) revert ZeroAddress();
+        // The address must carry exactly the BEFORE_INITIALIZE hook flag (mined CREATE2 salt).
+        Hooks.validateHookPermissions(IHooks(address(this)), _hookPermissions());
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         poolManager = IPoolManager(poolManager_);
         positionManager = IPositionManager(positionManager_);
@@ -110,8 +121,13 @@ contract Graduator is AccessControl, IUnlockCallback {
         if (msg.sender != curveOf[seriesId] || msg.sender == address(0)) revert Unauthorized(msg.sender);
         if (_poolKeys[seriesId].tickSpacing != 0) revert AlreadyGraduated(seriesId);
 
+        // Graduation fee first; the LP is sized from what is left.
+        uint256 fee = usdcAmount * GRADUATION_FEE_BPS / C.BPS;
+        _payTreasury(fee);
+        emit GraduationFee(seriesId, fee);
+
         // Use as much of both sides as fits at P = vU / vC.
-        (usdcToPool, coinToPool) = _lpAmounts(usdcAmount, coinAmount, vU, vC);
+        (usdcToPool, coinToPool) = _lpAmounts(usdcAmount - fee, coinAmount, vU, vC);
 
         bool usdcIs0 = usdc < coin;
         PoolKey memory key = PoolKey({
@@ -119,13 +135,13 @@ contract Graduator is AccessControl, IUnlockCallback {
             currency1: Currency.wrap(usdcIs0 ? coin : usdc),
             fee: POOL_FEE,
             tickSpacing: TICK_SPACING,
-            hooks: IHooks(address(0))
+            hooks: IHooks(address(this))
         });
         _poolKeys[seriesId] = key;
         poolId = PoolId.unwrap(key.toId());
 
         // price = token1 / token0 in raw units
-        uint160 sqrtPriceX96 = _preparePool(seriesId, key, usdcIs0 ? _sqrtPriceX96(vC, vU) : _sqrtPriceX96(vU, vC));
+        uint160 sqrtPriceX96 = _initializePool(key, usdcIs0 ? _sqrtPriceX96(vC, vU) : _sqrtPriceX96(vU, vC));
         uint128 liquidity;
         (usdcToPool, coinToPool, liquidity) = _provide(key, usdcIs0, sqrtPriceX96, usdcToPool, coinToPool);
 
@@ -144,29 +160,49 @@ contract Graduator is AccessControl, IUnlockCallback {
         return (usdcAmount, FullMath.mulDiv(usdcAmount, vC, vU));
     }
 
-    /// @dev Surplus: USDC to the treasury, coins burned.
+    /// @dev Surplus: USDC to the treasury, coins burned. USDC already owed to the treasury stays put.
     function _sweep(address coin) private {
-        uint256 left = IERC20(usdc).balanceOf(address(this));
-        if (left != 0) IERC20(usdc).safeTransfer(treasury, left);
-        left = IERC20(coin).balanceOf(address(this));
+        _payTreasury(IERC20(usdc).balanceOf(address(this)) - treasuryOwed);
+        uint256 left = IERC20(coin).balanceOf(address(this));
         if (left != 0) IERC20(coin).safeTransfer(C.DEAD, left);
     }
 
-    /// @dev Initializes the pool at `target`, or swaps a squatted pool back to it. Returns the pool's price.
-    function _preparePool(uint256 seriesId, PoolKey memory key, uint160 target) private returns (uint160) {
+    /// @dev Never reverts: a failed transfer (blacklisted or paused treasury) is parked in `treasuryOwed`.
+    function _payTreasury(uint256 amount) private {
+        if (amount == 0) return;
+        if (!IERC20(usdc).trySafeTransfer(treasury, amount)) {
+            treasuryOwed += amount;
+            emit TreasuryPaymentDeferred(amount);
+        }
+    }
+
+    /// @notice Anyone: retries the treasury payments that failed. Reverts while the transfer still fails.
+    function flushTreasury() external {
+        uint256 amount = treasuryOwed;
+        if (amount == 0) revert NothingOwed();
+        treasuryOwed = 0;
+        IERC20(usdc).safeTransfer(treasury, amount);
+        emit TreasuryFlushed(amount);
+    }
+
+    /// @dev Creates the pool at `target`. Only this contract can initialize a key that uses it as the hook.
+    function _initializePool(PoolKey memory key, uint160 target) private returns (uint160) {
         if (target <= TickMath.getSqrtPriceAtTick(TICK_LOWER) || target >= TickMath.getSqrtPriceAtTick(TICK_UPPER)) {
             revert PriceOutOfRange(target);
         }
-        (uint160 current,,,) = poolManager.getSlot0(key.toId());
-        if (current == 0) {
-            poolManager.initialize(key, target);
-            return target;
-        }
-        if (current == target) return target;
-        _correctPrice(key, current, target);
-        (uint160 corrected,,,) = poolManager.getSlot0(key.toId());
-        emit PoolPriceCorrected(seriesId, current, corrected);
-        return corrected;
+        poolManager.initialize(key, target);
+        return target;
+    }
+
+    /// @notice v4 hook: nobody else may create a pool with this hook. The Graduator's own `initialize` calls
+    ///         skip the hook (v4 `noSelfCall`), so this only ever runs for other callers and rejects them.
+    function beforeInitialize(address sender, PoolKey calldata, uint160) external view returns (bytes4) {
+        if (msg.sender != address(poolManager) || sender != address(this)) revert Unauthorized(sender);
+        return IHooks.beforeInitialize.selector;
+    }
+
+    function _hookPermissions() private pure returns (Hooks.Permissions memory p) {
+        p.beforeInitialize = true;
     }
 
     /// @dev Mints the full-range position with up to the wanted amounts and returns what actually went in.
@@ -178,9 +214,12 @@ contract Graduator is AccessControl, IUnlockCallback {
         IERC20 t1 = IERC20(Currency.unwrap(key.currency1));
         uint256 bal0 = t0.balanceOf(address(this));
         uint256 bal1 = t1.balanceOf(address(this));
-        // A correction swap can only have turned coins into USDC, so cap the wants at what is held.
-        (uint256 want0, uint256 want1) = usdcIs0 ? (usdcWant, coinWant) : (coinWant, usdcWant);
-        liquidity = _mintFullRange(key, sqrtPriceX96, Math.min(want0, bal0), Math.min(want1, bal1));
+        // Never spend more than is held (USDC owed to the treasury is not ours to pool).
+        usdcWant = Math.min(usdcWant, (usdcIs0 ? bal0 : bal1) - treasuryOwed);
+        coinWant = Math.min(coinWant, usdcIs0 ? bal1 : bal0);
+        liquidity = usdcIs0
+            ? _mintFullRange(key, sqrtPriceX96, usdcWant, coinWant)
+            : _mintFullRange(key, sqrtPriceX96, coinWant, usdcWant);
         uint256 used0 = bal0 - t0.balanceOf(address(this));
         uint256 used1 = bal1 - t1.balanceOf(address(this));
         (usdcIn, coinIn) = usdcIs0 ? (used0, used1) : (used1, used0);
@@ -216,36 +255,6 @@ contract Graduator is AccessControl, IUnlockCallback {
     function _approve(address token, uint256 amount) private {
         IERC20(token).forceApprove(address(permit2), amount);
         permit2.approve(token, address(positionManager), SafeCast.toUint160(amount), SafeCast.toUint48(block.timestamp));
-    }
-
-    // ------------------------------------------------------------------ squatted-pool correction
-
-    function _correctPrice(PoolKey memory key, uint160 current, uint160 target) private {
-        bool zeroForOne = current > target; // selling token0 pushes the price down
-        address tokenIn = Currency.unwrap(zeroForOne ? key.currency0 : key.currency1);
-        uint256 amountIn = IERC20(tokenIn).balanceOf(address(this));
-        if (amountIn == 0) return;
-        poolManager.unlock(abi.encode(key, zeroForOne, amountIn, target));
-    }
-
-    function unlockCallback(bytes calldata data) external returns (bytes memory) {
-        if (msg.sender != address(poolManager)) revert Unauthorized(msg.sender);
-        (PoolKey memory key, bool zeroForOne, uint256 amountIn, uint160 limit) =
-            abi.decode(data, (PoolKey, bool, uint256, uint160));
-        BalanceDelta delta = poolManager.swap(key, SwapParams(zeroForOne, -SafeCast.toInt256(amountIn), limit), "");
-        _settle(key.currency0, delta.amount0());
-        _settle(key.currency1, delta.amount1());
-        return "";
-    }
-
-    function _settle(Currency currency, int128 amount) private {
-        if (amount < 0) {
-            poolManager.sync(currency);
-            IERC20(Currency.unwrap(currency)).safeTransfer(address(poolManager), SafeCast.toUint256(-int256(amount)));
-            poolManager.settle();
-        } else if (amount > 0) {
-            poolManager.take(currency, address(this), SafeCast.toUint256(int256(amount)));
-        }
     }
 
     /// @dev sqrt(num / den) as a Q64.96.

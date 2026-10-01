@@ -56,10 +56,10 @@ contract BondingCurveTest is LaunchpadFixture {
     }
 
     function test_RevertWhen_TargetUnreachable() public {
-        // 19,000 USDC is the most the 950M curve coins can absorb (1B * 19000/20000 = 950M).
-        new BondingCurve(1, address(usdc), address(math), address(router), address(graduator), 19_000e6, address(this));
-        vm.expectRevert(abi.encodeWithSelector(BondingCurve.InvalidTarget.selector, 19_001e6));
-        new BondingCurve(1, address(usdc), address(math), address(router), address(graduator), 19_001e6, address(this));
+        // Targets must leave 10M coins for the pool: 15,666 USDC sells 939.997M, 15,667 would sell 940.001M.
+        new BondingCurve(1, address(usdc), address(math), address(router), address(graduator), 15_666e6, address(this));
+        vm.expectRevert(abi.encodeWithSelector(BondingCurve.InvalidTarget.selector, 15_667e6));
+        new BondingCurve(1, address(usdc), address(math), address(router), address(graduator), 15_667e6, address(this));
     }
 
     function test_RevertWhen_TradeBeforeCoinSet() public {
@@ -71,30 +71,34 @@ contract BondingCurveTest is LaunchpadFixture {
 
     // ------------------------------------------------------------------ buys
 
-    function test_BuyMatchesQuoteAndChargesOnePercent() public {
+    function test_BuyMatchesQuoteAndChargesOnePointFivePercent() public {
         _pastSnipe();
         (uint256 quoted, uint256 fee, uint256 used) = curve.quoteBuy(100e6);
-        assertEq(fee, 1e6);
+        assertEq(fee, 1.5e6);
         assertEq(used, 100e6);
-        assertEq(quoted, math.quoteBuy(U0, C0, 99e6));
+        assertEq(quoted, math.quoteBuy(U0, C0, 98.5e6));
 
         uint256 out = _buy(curve, buyer, 100e6);
         assertEq(out, quoted);
         assertEq(coin.balanceOf(buyer), out);
-        assertEq(curve.raised(), 99e6);
-        assertEq(curve.vU(), U0 + 99e6);
+        assertEq(curve.raised(), 98.5e6);
+        assertEq(curve.vU(), U0 + 98.5e6);
         assertEq(curve.vC(), C0 - out);
-        assertEq(usdc.balanceOf(address(curve)), 99e6);
-        // fee split: character 70% (no parent), treasury 30%
-        assertEq(usdc.balanceOf(characterAccount), 0.7e6);
-        assertEq(usdc.balanceOf(treasury), 0.3e6);
+        assertEq(usdc.balanceOf(address(curve)), 98.5e6);
+        // fee split 40/20/40 with no parent: character 40% + the whole 20% pool = 60%, treasury 40%
+        assertEq(usdc.balanceOf(characterAccount), 0.9e6);
+        assertEq(usdc.balanceOf(treasury), 0.6e6);
         assertEq(usdc.balanceOf(address(router)), 0);
     }
 
     function test_FeeRoundsUp() public view {
         (, uint256 fee, uint256 used) = curve.quoteBuy(101);
-        assertEq(fee, 2); // ceil(1.01)
+        assertEq(fee, 2); // ceil(1.515)
         assertEq(used, 101);
+        (, fee,) = curve.quoteBuy(200);
+        assertEq(fee, 3); // exactly 1.5% of 200
+        (, fee,) = curve.quoteBuy(201);
+        assertEq(fee, 4); // ceil(3.015)
     }
 
     function test_BuyEmitsTrade() public {
@@ -103,7 +107,7 @@ contract BondingCurveTest is LaunchpadFixture {
         usdc.approve(address(curve), 10e6);
         (uint256 out,,) = curve.quoteBuy(10e6);
         vm.expectEmit(address(curve));
-        emit BondingCurve.Trade(buyer, true, 10e6, out, 0.1e6, U0 + 9.9e6, C0 - out, 9.9e6);
+        emit BondingCurve.Trade(buyer, true, 10e6, out, 0.15e6, U0 + 9.85e6, C0 - out, 9.85e6);
         curve.buy(10e6, out, buyer);
         vm.stopPrank();
     }
@@ -181,7 +185,7 @@ contract BondingCurveTest is LaunchpadFixture {
 
     function test_BuyClipsExactlyAtTarget() public {
         _pastSnipe();
-        _buy(curve, buyer, 4_000e6); // net 3,960
+        _buy(curve, buyer, 4_000e6); // net 3,940
         uint256 remaining = 5_000e6 - curve.raised();
         (uint256 out, uint256 fee, uint256 used) = curve.quoteBuy(2_000e6);
         assertEq(used - fee, remaining);
@@ -213,7 +217,7 @@ contract BondingCurveTest is LaunchpadFixture {
         assertEq(used - fee, remaining);
         assertLe(used, usdcIn);
         // minimal: one unit less would not reach the target
-        uint256 lessFee = (used - 1) / 100 + ((used - 1) % 100 == 0 ? 0 : 1);
+        uint256 lessFee = ((used - 1) * 150 + 9_999) / 10_000; // ceil(1.5%)
         assertLt(used - 1 - lessFee, remaining);
     }
 
@@ -244,7 +248,7 @@ contract BondingCurveTest is LaunchpadFixture {
         (uint256 quoted, uint256 fee) = curve.quoteSell(out / 2);
         uint256 gross = math.quoteSell(curve.vU(), curve.vC(), out / 2);
         assertEq(quoted + fee, gross);
-        assertEq(fee, (gross + 99) / 100);
+        assertEq(fee, (gross * 150 + 9_999) / 10_000); // ceil(1.5%)
 
         uint256 treasuryBefore = usdc.balanceOf(treasury);
         vm.startPrank(buyer);
@@ -254,7 +258,7 @@ contract BondingCurveTest is LaunchpadFixture {
         assertEq(got, quoted);
         assertEq(usdc.balanceOf(buyer), quoted);
         assertEq(coin.balanceOf(buyer), out - out / 2);
-        assertEq(usdc.balanceOf(treasury) - treasuryBefore, fee * 3000 / 10000);
+        assertEq(usdc.balanceOf(treasury) - treasuryBefore, fee * 4000 / 10000);
         assertEq(curve.raised(), usdc.balanceOf(address(curve)));
     }
 
@@ -435,6 +439,27 @@ contract BondingCurveTest is LaunchpadFixture {
         curve.sellWithPermit(buyer, held / 2, 0, deadline, 0, 0, 0, intent);
         vm.expectRevert(BondingCurve.InvalidIntentSignature.selector);
         curve.sellWithPermit(buyer, held / 2, 0, deadline, 0, 0, 0, intent);
+    }
+
+    /// AUDIT.md L-3: a seller can cancel an outstanding signed intent before its deadline.
+    function test_InvalidateSellNonceCancelsSignedIntent() public {
+        uint256 held = _buy(curve, buyer, 10e6);
+        uint256 deadline = block.timestamp + 600;
+        vm.prank(buyer);
+        coin.approve(address(curve), type(uint256).max);
+        bytes memory intent = _intentSig(buyerPk, held, 0, deadline, 0);
+        vm.expectEmit(address(curve));
+        emit BondingCurve.SellNonceInvalidated(buyer, 0);
+        vm.prank(buyer);
+        curve.invalidateSellNonce();
+        assertEq(curve.sellNonces(buyer), 1);
+        vm.prank(relayer);
+        vm.expectRevert(BondingCurve.InvalidIntentSignature.selector);
+        curve.sellWithPermit(buyer, held, 0, deadline, 0, 0, 0, intent);
+        // a fresh intent for the next nonce works
+        intent = _intentSig(buyerPk, held, 0, deadline, 1);
+        vm.prank(relayer);
+        assertGt(curve.sellWithPermit(buyer, held, 0, deadline, 0, 0, 0, intent), 0);
     }
 
     function test_RevertWhen_SellNoPermitNoAllowance() public {

@@ -52,6 +52,12 @@ contract SeriesFactory is AccessControl {
     address public immutable treasury;
     CurveDeployer public immutable curveDeployer;
     CoinDeployer public immutable coinDeployer;
+    /// @notice Smallest per-series graduation target / voting window the launcher may request (0 = default).
+    ///         Set per chain at deploy time so testnet demo values (25 USDC, 300 s) cannot reach mainnet.
+    uint256 public immutable minGraduationTarget;
+    uint64 public immutable minVotingWindow;
+    /// @notice Largest voting window (keeps `endsAt` far from uint64 overflow and canon slots finite).
+    uint64 public constant MAX_VOTING_WINDOW = 30 days;
 
     mapping(uint256 id => Series) private _series;
     uint256 public seriesCount;
@@ -72,6 +78,9 @@ contract SeriesFactory is AccessControl {
     error ZeroAddress();
     error UnknownParent(uint256 parentSeriesId);
     error EmptyName();
+    error InvalidBounds();
+    error TargetTooLow(uint256 target, uint256 min);
+    error InvalidVotingWindow(uint64 window);
 
     constructor(
         address admin,
@@ -83,14 +92,22 @@ contract SeriesFactory is AccessControl {
         address graduator_,
         address treasury_,
         address curveDeployer_,
-        address coinDeployer_
+        address coinDeployer_,
+        uint256 minGraduationTarget_,
+        uint64 minVotingWindow_
     ) {
         if (
             usdc_ == address(0) || math_ == address(0) || router_ == address(0) || characterNft_ == address(0)
                 || canon_ == address(0) || graduator_ == address(0) || treasury_ == address(0)
                 || curveDeployer_ == address(0) || coinDeployer_ == address(0)
         ) revert ZeroAddress();
+        // The defaults (used when a launch passes 0) must always be allowed.
+        if (minGraduationTarget_ > C.DEFAULT_GRADUATION_TARGET || minVotingWindow_ > C.DEFAULT_VOTING_WINDOW) {
+            revert InvalidBounds();
+        }
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
+        minGraduationTarget = minGraduationTarget_;
+        minVotingWindow = minVotingWindow_;
         usdc = usdc_;
         math = ICurveMath(math_);
         router = IRoyaltyRouter(router_);
@@ -135,6 +152,10 @@ contract SeriesFactory is AccessControl {
         s.parentSeriesId = p.parentSeriesId;
         s.graduationTarget = p.graduationTarget == 0 ? C.DEFAULT_GRADUATION_TARGET : p.graduationTarget;
         s.votingWindow = p.votingWindow == 0 ? C.DEFAULT_VOTING_WINDOW : p.votingWindow;
+        if (s.graduationTarget < minGraduationTarget) revert TargetTooLow(s.graduationTarget, minGraduationTarget);
+        if (s.votingWindow < minVotingWindow || s.votingWindow > MAX_VOTING_WINDOW) {
+            revert InvalidVotingWindow(s.votingWindow);
+        }
         s.launchedAt = uint64(block.timestamp);
         (s.characterId, s.characterAccount) = characterNft.mint(p.creator, p.characterName, p.sheetHash);
         s.vesting = coinDeployer.deployVesting(p.creator, uint64(block.timestamp), C.CREATOR_VESTING);

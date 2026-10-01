@@ -136,12 +136,13 @@ fn hand_encoded_logs_equal_alloy_encoding() {
     let (id, c, a, p) = (U256::MAX, curve(3), account(3), u(0));
     r.register_series(id, c, a, p).unwrap();
     let reference = TestVM::default();
+    reference.log(OwnershipTransferred { previousOwner: Address::ZERO, newOwner: OWNER }); // from initialize
     reference.log(SeriesRegistered { seriesId: id, curve: c, characterAccount: a, parentSeriesId: p });
     assert_eq!(vm.get_emitted_logs(), reference.get_emitted_logs());
 
     let (vm, mut r) = setup();
     chain(&vm, &mut r, 2);
-    let amount = U256::MAX / u(5_000);
+    let amount = U256::MAX / u(4_000);
     for (to, a, _) in expected_legs(2, amount) {
         mock_transfer(&vm, to, a, true);
     }
@@ -234,10 +235,62 @@ fn register_series_factory_only_and_validation() {
     assert_eq!((r.curve_of(u(2)), r.account_of(u(2)), r.parent_of(u(2))), (curve(2), account(2), u(1)));
     assert_eq!((r.curve_of(u(3)), r.account_of(u(3)), r.parent_of(u(3))), (Address::ZERO, Address::ZERO, u(0)));
 
-    let logs = vm.get_emitted_logs();
+    let logs: Vec<_> =
+        vm.get_emitted_logs().into_iter().filter(|(t, _)| t[0] == SeriesRegistered::SIGNATURE_HASH).collect();
     assert_eq!(logs.len(), 2);
     let ev = SeriesRegistered::decode_raw_log(logs[1].0.iter().copied(), &logs[1].1).unwrap();
     assert_eq!((ev.seriesId, ev.curve, ev.characterAccount, ev.parentSeriesId), (u(2), curve(2), account(2), u(1)));
+}
+
+fn ownership_logs(vm: &TestVM) -> Vec<(Address, Address)> {
+    vm.get_emitted_logs()
+        .into_iter()
+        .filter(|(t, _)| t[0] == OwnershipTransferred::SIGNATURE_HASH)
+        .map(|(t, d)| {
+            let ev = OwnershipTransferred::decode_raw_log(t.iter().copied(), &d).unwrap();
+            (ev.previousOwner, ev.newOwner)
+        })
+        .collect()
+}
+
+#[test]
+fn ownership_transferred_event_matches_alloy_encoding() {
+    assert_eq!(OwnershipTransferred::SIGNATURE, "OwnershipTransferred(address,address)");
+    let (vm, mut r) = deployed();
+    vm.set_sender(DEPLOYER);
+    r.initialize(USDC, TREASURY, OWNER).unwrap();
+    let reference = TestVM::default();
+    reference.log(OwnershipTransferred { previousOwner: Address::ZERO, newOwner: OWNER });
+    assert_eq!(vm.get_emitted_logs(), reference.get_emitted_logs());
+}
+
+#[test]
+fn transfer_ownership_owner_only_and_hands_over_set_factory() {
+    let (vm, mut r) = deployed();
+    // before initialize nobody owns it, not even a zero sender
+    vm.set_sender(Address::ZERO);
+    assert_eq!(r.transfer_ownership(OWNER).unwrap_err(), unauth(Address::ZERO));
+    // deployer initializes with itself as owner, wires the factory, then hands over to the admin
+    vm.set_sender(DEPLOYER);
+    r.initialize(USDC, TREASURY, DEPLOYER).unwrap();
+    r.set_factory(FACTORY).unwrap();
+    for who in [STRANGER, FACTORY, TREASURY, OWNER] {
+        vm.set_sender(who);
+        assert_eq!(r.transfer_ownership(who).unwrap_err(), unauth(who));
+    }
+    vm.set_sender(DEPLOYER);
+    assert_eq!(r.transfer_ownership(Address::ZERO).unwrap_err(), zero_addr());
+    r.transfer_ownership(OWNER).unwrap();
+    assert_eq!(r.owner(), OWNER);
+    assert_eq!(ownership_logs(&vm), vec![(Address::ZERO, DEPLOYER), (DEPLOYER, OWNER)]);
+    // the old owner is locked out, the new one has every owner power
+    assert_eq!(r.set_factory(STRANGER).unwrap_err(), unauth(DEPLOYER));
+    assert_eq!(r.transfer_ownership(DEPLOYER).unwrap_err(), unauth(DEPLOYER));
+    vm.set_sender(OWNER);
+    r.set_factory(STRANGER).unwrap();
+    assert_eq!(r.factory(), STRANGER);
+    // usdc / treasury are untouched by ownership changes
+    assert_eq!((r.usdc(), r.treasury()), (USDC, TREASURY));
 }
 
 #[test]
@@ -271,7 +324,7 @@ fn route_only_by_that_series_curve() {
 fn split_sums_to_amount_every_depth() {
     let mut rng = Rng(7);
     let mut amounts: Vec<U256> = (0..=300u128).map(u).collect();
-    amounts.extend([u(9_999), u(10_000), u(10_001), U256::MAX / u(5_000), U256::MAX / u(5_000) - u(1)]);
+    amounts.extend([u(9_999), u(10_000), u(10_001), U256::MAX / u(4_000), U256::MAX / u(4_000) - u(1)]);
     for _ in 0..3_000 { amounts.push(rng.amount()); }
     for a in amounts {
         for depth in 0..=10usize {
@@ -280,8 +333,8 @@ fn split_sums_to_amount_every_depth() {
             let total = sp.ancestors.iter().fold(sp.character + sp.treasury, |x, y| x + *y);
             assert_eq!(total, a, "amount {a} depth {depth}");
             // literal spec expressions (ruint on the host)
-            let spec_char = a * u(5_000) / u(10_000);
-            let spec_tre = a * u(3_000) / u(10_000);
+            let spec_char = a * u(4_000) / u(10_000);
+            let spec_tre = a * u(4_000) / u(10_000);
             let spec_pool = a - spec_char - spec_tre;
             assert_eq!(split::base_split(a).unwrap(), (spec_char, spec_tre, spec_pool));
             assert_eq!(sp.treasury, spec_tre);
@@ -292,9 +345,12 @@ fn split_sums_to_amount_every_depth() {
             }
         }
     }
-    assert_eq!(split::MAX_AMOUNT, U256::MAX / u(5_000));
-    assert!(split::split(U256::MAX / u(5_000) + u(1), 0).is_none());
+    assert_eq!(split::MAX_AMOUNT, U256::MAX / u(4_000));
+    assert!(split::split(U256::MAX / u(4_000) + u(1), 0).is_none());
     assert!(split::split(U256::MAX, 3).is_none());
+    assert_eq!((split::CHARACTER_BPS, split::TREASURY_BPS), (4_000, 4_000));
+    // 40/20/40 on a round number
+    assert_eq!(split::base_split(u(10_000)).unwrap(), (u(4_000), u(4_000), u(2_000)));
 }
 
 fn route_and_check(n_chain: u64, id: u64, amount: U256) {
@@ -330,7 +386,7 @@ fn route_every_depth_random_amounts() {
     for depth in 0..=10u64 {
         for _ in 0..40 {
             let amt = rng.amount();
-            let amt = amt.min(U256::MAX / u(5_000));
+            let amt = amt.min(U256::MAX / u(4_000));
             route_and_check(depth + 1, depth + 1, amt);
         }
         for amt in [0u128, 1, 2, 3, 5, 7, 10, 99, 100, 255, 256, 257, 511, 1_000_000] {
@@ -343,35 +399,35 @@ fn route_every_depth_random_amounts() {
 fn route_root_series_gives_pool_to_character() {
     let (vm, mut r) = setup();
     chain(&vm, &mut r, 1);
-    mock_transfer(&vm, account(1), u(700_000), true);
-    mock_transfer(&vm, TREASURY, u(300_000), true);
+    mock_transfer(&vm, account(1), u(600_000), true);
+    mock_transfer(&vm, TREASURY, u(400_000), true);
     vm.set_sender(curve(1));
     r.route(u(1), u(1_000_000)).unwrap();
-    assert_eq!(r.earned(account(1)), u(700_000));
-    assert_eq!(r.earned(TREASURY), u(300_000));
+    assert_eq!(r.earned(account(1)), u(600_000));
+    assert_eq!(r.earned(TREASURY), u(400_000));
 }
 
 #[test]
 fn route_depth3_numbers() {
-    // 1_000_000 -> char 500_000, treasury 300_000, pool 200_000
+    // 1_000_000 -> char 400_000, treasury 400_000, pool 200_000
     // parent 100_000, grandparent 50_000, great-grandparent 25_000, char += 25_000
     let (vm, mut r) = setup();
     chain(&vm, &mut r, 4);
-    for (to, a) in [(account(3), 100_000), (account(2), 50_000), (account(1), 25_000), (account(4), 525_000), (TREASURY, 300_000)] {
+    for (to, a) in [(account(3), 100_000), (account(2), 50_000), (account(1), 25_000), (account(4), 425_000), (TREASURY, 400_000)] {
         mock_transfer(&vm, to, u(a), true);
     }
     vm.set_sender(curve(4));
     r.route(u(4), u(1_000_000)).unwrap();
-    assert_eq!(r.earned(account(4)), u(525_000));
+    assert_eq!(r.earned(account(4)), u(425_000));
     assert_eq!(r.earned(account(3)), u(100_000));
     assert_eq!(r.earned(account(2)), u(50_000));
     assert_eq!(r.earned(account(1)), u(25_000));
-    assert_eq!(r.earned(TREASURY), u(300_000));
+    assert_eq!(r.earned(TREASURY), u(400_000));
     // earned accumulates across calls
     vm.set_sender(curve(4));
     r.route(u(4), u(1_000_000)).unwrap();
-    assert_eq!(r.earned(account(4)), u(1_050_000));
-    assert_eq!(r.earned(TREASURY), u(600_000));
+    assert_eq!(r.earned(account(4)), u(850_000));
+    assert_eq!(r.earned(TREASURY), u(800_000));
 }
 
 #[test]
@@ -382,14 +438,14 @@ fn branching_tree_pays_only_own_lineage() {
     r.register_series(u(2), curve(2), account(2), u(1)).unwrap();
     r.register_series(u(3), curve(3), account(3), u(1)).unwrap(); // sibling of 2
     r.register_series(u(4), curve(4), account(4), u(3)).unwrap();
-    // 4 -> 3 -> 1: pool 2_000 → 3 gets 1_000, 1 gets 500, 4 gets 5_000 + 500
-    for (to, a) in [(account(3), 1_000), (account(1), 500), (account(4), 5_500), (TREASURY, 3_000)] {
+    // 4 -> 3 -> 1: pool 2_000 → 3 gets 1_000, 1 gets 500, 4 gets 4_000 + 500
+    for (to, a) in [(account(3), 1_000), (account(1), 500), (account(4), 4_500), (TREASURY, 4_000)] {
         mock_transfer(&vm, to, u(a), true);
     }
     vm.set_sender(curve(4));
     r.route(u(4), u(10_000)).unwrap();
     assert_eq!(r.earned(account(2)), U256::ZERO);
-    assert_eq!(r.earned(account(4)), u(5_500));
+    assert_eq!(r.earned(account(4)), u(4_500));
 }
 
 #[test]
@@ -398,7 +454,7 @@ fn transfer_returning_false_reverts() {
     chain(&vm, &mut r, 1);
     // stylus-test 0.10.9 quirk: TestVM serves the return data of the *last
     // registered* mock for every call, so register only the `false` mock.
-    mock_transfer(&vm, account(1), u(7_000), false);
+    mock_transfer(&vm, account(1), u(6_000), false);
     vm.set_sender(curve(1));
     assert_eq!(r.route(u(1), u(10_000)).unwrap_err(), SafeERC20FailedOperation { token: USDC }.abi_encode());
 }
@@ -407,7 +463,7 @@ fn transfer_returning_false_reverts() {
 fn transfer_reverting_bubbles_revert_data() {
     let (vm, mut r) = setup();
     chain(&vm, &mut r, 1);
-    vm.mock_call(USDC, transfer_data(account(1), u(7_000)), U256::ZERO, Err(b"nope".to_vec()));
+    vm.mock_call(USDC, transfer_data(account(1), u(6_000)), U256::ZERO, Err(b"nope".to_vec()));
     vm.set_sender(curve(1));
     assert_eq!(r.route(u(1), u(10_000)).unwrap_err(), b"nope".to_vec());
 }
@@ -441,10 +497,10 @@ fn generate_router_vectors() -> String {
     amounts.extend([
         u(63), u(64), u(99), u(100), u(101), u(255), u(256), u(257), u(511), u(512), u(1_023), u(1_024),
         u(9_999), u(10_000), u(10_001), u(10_000_000), u(250_000), u(50_000_000), u(1_000_000_000_000),
-        U256::MAX / u(5_000) - u(1), U256::MAX / u(5_000),
+        U256::MAX / u(4_000) - u(1), U256::MAX / u(4_000),
     ]);
     for _ in 0..120 {
-        amounts.push(rng.amount().min(U256::MAX / u(5_000)));
+        amounts.push(rng.amount().min(U256::MAX / u(4_000)));
     }
     let mut cases = Vec::new();
     for a in &amounts {
@@ -458,9 +514,9 @@ fn generate_router_vectors() -> String {
         }
     }
     format!(
-        "{{\n  \"description\": \"KOMA IRoyaltyRouter.route split vectors. All integers are decimal strings except depth. depth = number of registered ancestors above the routed series (0 = root); only the nearest 8 are paid, so ancestors[] has min(depth, 8) entries, ancestors[0] = parent (kind 1). character (kind 0) includes the unpaid remix-pool remainder and dust; treasury is kind 2. character + treasury + sum(ancestors) == amount. On-chain, zero-amount legs are skipped (no transfer, no Routed event). Payment order: ancestors nearest-first, character, treasury. amount > (2^256-1)/5000 reverts (amount*5000 overflows).\",\n  \"generator\": \"stylus/royalty-router/src/tests.rs::router_vectors (KOMA_WRITE_VECTORS=1 cargo test -p royalty-router router_vectors)\",\n  \"count\": {},\n  \"overflowAmount\": {},\n  \"cases\": [\n    {}\n  ]\n}}\n",
+        "{{\n  \"description\": \"KOMA IRoyaltyRouter.route split vectors. All integers are decimal strings except depth. depth = number of registered ancestors above the routed series (0 = root); only the nearest 8 are paid, so ancestors[] has min(depth, 8) entries, ancestors[0] = parent (kind 1). character (kind 0) includes the unpaid remix-pool remainder and dust; treasury is kind 2. character + treasury + sum(ancestors) == amount. On-chain, zero-amount legs are skipped (no transfer, no Routed event). Payment order: ancestors nearest-first, character, treasury. amount > (2^256-1)/4000 reverts (amount*4000 overflows). Split: character 40% / remix pool 20% / treasury 40% (bps 4000/2000/4000).\",\n  \"generator\": \"stylus/royalty-router/src/tests.rs::router_vectors (KOMA_WRITE_VECTORS=1 cargo test -p royalty-router router_vectors)\",\n  \"count\": {},\n  \"overflowAmount\": {},\n  \"cases\": [\n    {}\n  ]\n}}\n",
         cases.len(),
-        s(U256::MAX / u(5_000) + u(1)),
+        s(U256::MAX / u(4_000) + u(1)),
         cases.join(",\n    ")
     )
 }

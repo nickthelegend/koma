@@ -16,18 +16,24 @@ import {BondingCurve} from "../../src/BondingCurve.sol";
 import {SeriesCoin} from "../../src/SeriesCoin.sol";
 import {CurveDeployer} from "../../src/deployers/CurveDeployer.sol";
 import {CoinDeployer} from "../../src/deployers/CoinDeployer.sol";
-import {TestUSDC} from "./TestUSDC.sol";
-import {MockERC6551Registry} from "./Mock6551.sol";
+import {CircleUSDC, IFiatToken} from "./CircleUSDC.sol";
+import {Tokenbound} from "./Tokenbound.sol";
 
-/// @notice Full launchpad on a local chain: TestUSDC (EIP-3009), mock ERC-6551 registry, and the real
-///         Uniswap v4 PoolManager / PositionManager / Permit2 deployed from their published artifacts.
+/// @notice Full launchpad on a local chain with no test doubles: Circle's FiatToken v2.2 (Arbitrum One USDC
+///         runtime code, etched), the real Tokenbound ERC-6551 registry / AccountProxy / AccountV3 (etched), and
+///         the real Uniswap v4 PoolManager / PositionManager / Permit2 deployed from their published artifacts.
 abstract contract LaunchpadFixture is Test, DeployPermit2 {
     string internal constant POOL_MANAGER_ARTIFACT =
         "../node_modules/@uniswap/v4-core/out/PoolManager.sol/PoolManager.json";
     string internal constant POSITION_MANAGER_ARTIFACT =
         "../node_modules/@uniswap/v4-periphery/foundry-out/PositionManager.sol/PositionManager.json";
-    address internal constant ACCOUNT_PROXY = address(0xAC0);
-    address internal constant ACCOUNT_IMPL = address(0x1A1);
+    address internal constant ACCOUNT_PROXY = Tokenbound.ACCOUNT_PROXY;
+    address internal constant ACCOUNT_IMPL = Tokenbound.ACCOUNT_IMPL;
+    /// Graduator address: carries exactly the v4 BEFORE_INITIALIZE hook flag (mined with CREATE2 in the deploy).
+    address internal constant GRADUATOR_AT =
+        address((uint160(uint256(keccak256("koma.test.graduator"))) & ~uint160(0x3FFF)) | uint160(1 << 13));
+    uint256 internal constant MIN_TARGET = 1e6;
+    uint64 internal constant MIN_WINDOW = 60;
     address internal constant DEAD = 0x000000000000000000000000000000000000dEaD;
 
     address internal admin = makeAddr("admin");
@@ -35,11 +41,10 @@ abstract contract LaunchpadFixture is Test, DeployPermit2 {
     address internal relayer = makeAddr("relayer");
     address internal creator = makeAddr("creator");
 
-    TestUSDC internal usdc;
+    IFiatToken internal usdc;
     IPoolManager internal poolManager;
     IPositionManager internal positionManager;
     address internal permit2;
-    MockERC6551Registry internal registry;
     CurveMathReference internal math;
     RoyaltyRouterReference internal router;
     CharacterNFT internal nft;
@@ -50,20 +55,25 @@ abstract contract LaunchpadFixture is Test, DeployPermit2 {
 
     function setUp() public virtual {
         vm.warp(1_760_000_000);
-        usdc = new TestUSDC();
+        usdc = CircleUSDC.deploy();
         permit2 = deployPermit2();
         poolManager = IPoolManager(deployCode(POOL_MANAGER_ARTIFACT, abi.encode(admin)));
         positionManager = IPositionManager(
             deployCode(POSITION_MANAGER_ARTIFACT, abi.encode(poolManager, permit2, 300_000, address(0), address(0)))
         );
-        registry = new MockERC6551Registry();
+        Tokenbound.etch();
 
         math = new CurveMathReference();
         router = new RoyaltyRouterReference();
         router.initialize(address(usdc), treasury, admin);
-        nft = new CharacterNFT(admin, address(registry), ACCOUNT_PROXY, ACCOUNT_IMPL, "https://koma.test/api/characters/");
+        nft = new CharacterNFT(admin, Tokenbound.REGISTRY, ACCOUNT_PROXY, ACCOUNT_IMPL, "https://koma.test/api/characters/");
         canon = new CanonRegistry(admin);
-        graduator = new Graduator(admin, address(poolManager), address(positionManager), permit2, address(usdc), treasury);
+        deployCodeTo(
+            "Graduator.sol:Graduator",
+            abi.encode(admin, address(poolManager), address(positionManager), permit2, address(usdc), treasury),
+            GRADUATOR_AT
+        );
+        graduator = Graduator(GRADUATOR_AT);
         factory = new SeriesFactory(
             admin,
             address(usdc),
@@ -74,7 +84,9 @@ abstract contract LaunchpadFixture is Test, DeployPermit2 {
             address(graduator),
             treasury,
             address(new CurveDeployer()),
-            address(new CoinDeployer())
+            address(new CoinDeployer()),
+            MIN_TARGET,
+            MIN_WINDOW
         );
         swapper = new KomaSwapper(address(poolManager), address(graduator), address(usdc));
 
@@ -119,7 +131,7 @@ abstract contract LaunchpadFixture is Test, DeployPermit2 {
     }
 
     function _fund(address who, uint256 amount) internal {
-        usdc.mint(who, amount);
+        CircleUSDC.mint(who, amount);
     }
 
     function _buy(BondingCurve curve, address who, uint256 usdcIn) internal returns (uint256 out) {

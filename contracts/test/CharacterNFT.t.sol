@@ -4,21 +4,22 @@ pragma solidity ^0.8.28;
 import {Test} from "forge-std/Test.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {CharacterNFT} from "../src/CharacterNFT.sol";
-import {MockERC6551Registry, MockTokenboundAccount} from "./utils/Mock6551.sol";
-import {TestUSDC} from "./utils/TestUSDC.sol";
+import {Tokenbound, IAccountV3, IERC6551RegistryFull, ITokenboundProxy, IAccountGuardian} from "./utils/Tokenbound.sol";
+import {CircleUSDC, IFiatToken} from "./utils/CircleUSDC.sol";
 
+/// Runs against the real Tokenbound registry / AccountProxy / AccountV3 code (etched from Arbitrum One).
 contract CharacterNFTTest is Test {
     CharacterNFT nft;
-    MockERC6551Registry registry;
+    IERC6551RegistryFull registry = IERC6551RegistryFull(Tokenbound.REGISTRY);
     address admin = makeAddr("admin");
     address minter = makeAddr("minter");
     address alice = makeAddr("alice");
     address bob = makeAddr("bob");
-    address constant PROXY = address(0xAC0);
-    address constant IMPL = address(0x1A1);
+    address constant PROXY = Tokenbound.ACCOUNT_PROXY;
+    address constant IMPL = Tokenbound.ACCOUNT_IMPL;
 
     function setUp() public {
-        registry = new MockERC6551Registry();
+        Tokenbound.etch();
         nft = new CharacterNFT(admin, address(registry), PROXY, IMPL, "https://koma.test/c/");
         vm.startPrank(admin);
         nft.grantRole(nft.MINTER_ROLE(), minter);
@@ -37,34 +38,73 @@ contract CharacterNFTTest is Test {
         assertEq(nft.accountOf(1), account);
         assertEq(nft.sheetHash(1), keccak256("sheet"));
         assertEq(nft.nameOf(1), "Aki");
-        assertEq(MockTokenboundAccount(payable(account)).implementation(), IMPL);
-        assertEq(MockTokenboundAccount(payable(account)).owner(), alice);
+        assertGt(account.code.length, 0, "account deployed by the real registry");
+        (uint256 chainId, address tokenContract, uint256 tokenId) = IAccountV3(account).token();
+        assertEq(chainId, block.chainid);
+        assertEq(tokenContract, address(nft));
+        assertEq(tokenId, 1);
+        assertEq(IAccountV3(account).owner(), alice);
         assertEq(nft.tokenURI(1), "https://koma.test/c/1");
     }
 
     function test_MintToleratesPrecreatedAccount() public {
-        // Anyone can call the permissionless registry (and initialize) before the mint lands.
+        // Anyone can call the permissionless registry before the mint lands.
         address pre = registry.createAccount(PROXY, bytes32(0), block.chainid, address(nft), 1);
-        MockTokenboundAccount(payable(pre)).initialize(IMPL);
         vm.prank(minter);
         (, address account) = nft.mint(alice, "Aki", bytes32(0));
         assertEq(account, pre);
+        assertEq(IAccountV3(account).owner(), alice);
+    }
+
+    /// AUDIT.md I-4: the Tokenbound guardian trusts no implementation (as on Arbitrum One and Sepolia), so the
+    /// proxy's `initialize` always reverts. The mint swallows that and the account runs the proxy's immutable
+    /// initial implementation (AccountV3); nobody can re-point it either.
+    function test_ProxyInitializeIsRejectedAndAccountStillWorks() public {
+        assertFalse(IAccountGuardian(Tokenbound.GUARDIAN).isTrustedImplementation(IMPL));
+        vm.prank(minter);
+        (, address account) = nft.mint(alice, "Aki", bytes32(0));
+        vm.expectRevert();
+        ITokenboundProxy(account).initialize(IMPL);
+        vm.prank(alice);
+        IAccountV3(account).execute(bob, 0, "", 0); // a call from the account works
     }
 
     function test_AccountFollowsNftOwner() public {
-        TestUSDC usdc = new TestUSDC();
+        IFiatToken usdc = CircleUSDC.deploy();
         vm.prank(minter);
         (, address account) = nft.mint(alice, "Aki", bytes32(0));
-        usdc.mint(account, 5e6);
+        CircleUSDC.mint(account, 5e6);
 
         vm.prank(bob);
-        vm.expectRevert(MockTokenboundAccount.NotOwner.selector);
-        MockTokenboundAccount(payable(account)).execute(address(usdc), 0, abi.encodeCall(usdc.transfer, (bob, 1e6)), 0);
+        vm.expectRevert();
+        IAccountV3(account).execute(address(usdc), 0, abi.encodeCall(usdc.transfer, (bob, 1e6)), 0);
 
         vm.prank(alice);
         nft.transferFrom(alice, bob, 1);
+        vm.prank(alice);
+        vm.expectRevert();
+        IAccountV3(account).execute(address(usdc), 0, abi.encodeCall(usdc.transfer, (alice, 1e6)), 0);
         vm.prank(bob);
-        MockTokenboundAccount(payable(account)).execute(address(usdc), 0, abi.encodeCall(usdc.transfer, (bob, 5e6)), 0);
+        IAccountV3(account).execute(address(usdc), 0, abi.encodeCall(usdc.transfer, (bob, 5e6)), 0);
+        assertEq(usdc.balanceOf(bob), 5e6);
+    }
+
+    /// AUDIT.md I-3: AccountV3 lets the holder lock the account; a buyer of a locked character must wait.
+    function test_LockedAccountBlocksWithdrawUntilExpiry() public {
+        IFiatToken usdc = CircleUSDC.deploy();
+        vm.prank(minter);
+        (, address account) = nft.mint(alice, "Aki", bytes32(0));
+        CircleUSDC.mint(account, 5e6);
+        vm.prank(alice);
+        IAccountV3(account).lock(block.timestamp + 1 days);
+        vm.prank(alice);
+        nft.transferFrom(alice, bob, 1);
+        vm.prank(bob);
+        vm.expectRevert();
+        IAccountV3(account).execute(address(usdc), 0, abi.encodeCall(usdc.transfer, (bob, 5e6)), 0);
+        vm.warp(block.timestamp + 1 days + 1);
+        vm.prank(bob);
+        IAccountV3(account).execute(address(usdc), 0, abi.encodeCall(usdc.transfer, (bob, 5e6)), 0);
         assertEq(usdc.balanceOf(bob), 5e6);
     }
 

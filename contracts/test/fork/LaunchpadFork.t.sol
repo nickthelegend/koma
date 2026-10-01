@@ -13,6 +13,8 @@ import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
+import {FullMath} from "@uniswap/v4-core/src/libraries/FullMath.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 /// Full lifecycle against real Arbitrum Sepolia contracts: Circle USDC (EIP-3009 signatures), the ERC-6551
 /// registry + Tokenbound accounts, and the Uniswap v4 PoolManager / PositionManager / Permit2. The system is
@@ -38,7 +40,6 @@ contract LaunchpadForkTest is ForkBase {
         vm.setEnv("KOMA_ISSUES", vm.toString(address(0)));
         vm.setEnv("ADDRESSES_OUT", "none");
         d = new DeployLaunchpad().run();
-        vm.setEnv("DEPLOYER_KEY", "");
         factory = SeriesFactory(d.seriesFactory);
     }
 
@@ -103,8 +104,9 @@ contract LaunchpadForkTest is ForkBase {
             curve.buyWithAuthorization(buyer, 10e6, quoted, deadline, "fork", 0, block.timestamp + 1 hours, v, r, sig);
         assertEq(coins, quoted);
         assertTrue(usdc.authorizationState(buyer, nonce));
-        assertEq(usdc.balanceOf(characterAccount), 0.07e6, "70% of the 0.1 USDC fee to the TBA");
-        assertEq(usdc.balanceOf(treasury), 0.03e6);
+        // 1.5% fee = 0.15 USDC; no parent: 40% + the 20% pool to the TBA, 40% to the treasury
+        assertEq(usdc.balanceOf(characterAccount), 0.09e6, "60% of the 0.15 USDC fee to the TBA");
+        assertEq(usdc.balanceOf(treasury), 0.06e6);
     }
 
     /// Coin permit + EIP-712 intent.
@@ -132,9 +134,19 @@ contract LaunchpadForkTest is ForkBase {
         }
         assertEq(curve.raised(), 25e6);
 
+        (uint256 vU, uint256 vC,,,,,) = curve.state();
+        uint160 want = address(usdc) < address(coin)
+            ? uint160(Math.sqrt(FullMath.mulDiv(vC, 1 << 192, vU)))
+            : uint160(Math.sqrt(FullMath.mulDiv(vU, 1 << 192, vC)));
+        uint256 treasuryBefore = usdc.balanceOf(treasury);
+        vm.expectEmit(true, false, false, true, d.graduator);
+        emit Graduator.GraduationFee(id, 1.25e6); // 5% of 25 USDC
         bytes32 poolId = curve.graduate();
         (uint160 sqrtP,,,) = StateLibrary.getSlot0(IPoolManager(POOL_MANAGER), PoolId.wrap(poolId));
-        assertGt(sqrtP, 0);
+        assertEq(sqrtP, want, "pool opens at the curve's final price");
+        // coins are the abundant side at $25: the treasury gets the fee plus at most 1 unit of mint dust
+        assertGe(usdc.balanceOf(treasury) - treasuryBefore, 1.25e6);
+        assertLe(usdc.balanceOf(treasury) - treasuryBefore, 1.25e6 + 1);
         assertGt(StateLibrary.getLiquidity(IPoolManager(POOL_MANAGER), PoolId.wrap(poolId)), 0);
         assertEq(IERC721(POSITION_MANAGER).ownerOf(_lastPositionId()), 0x000000000000000000000000000000000000dEaD);
         assertEq(coin.balanceOf(address(curve)), 0);

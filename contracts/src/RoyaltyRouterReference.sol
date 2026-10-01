@@ -6,15 +6,15 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {IRoyaltyRouter} from "./interfaces/IRoyaltyRouter.sol";
 
 /// @title Solidity reference for the Stylus royalty-router contract
-/// @notice Pushes every curve fee straight out: 50% to the series' character TBA, 30% to the treasury and a
+/// @notice Pushes every curve fee straight out: 40% to the series' character TBA, 40% to the treasury and a
 ///         20% remix pool that pays ancestor i (1 = parent) `pool >> i`, up to 8 generations. Whatever the
 ///         ancestors don't take (and all rounding dust) goes to the character, so exactly `amount` leaves.
 contract RoyaltyRouterReference is IRoyaltyRouter {
     using SafeERC20 for IERC20;
 
     uint256 public constant BPS = 10_000;
-    uint256 public constant CHARACTER_BPS = 5_000;
-    uint256 public constant TREASURY_BPS = 3_000;
+    uint256 public constant CHARACTER_BPS = 4_000;
+    uint256 public constant TREASURY_BPS = 4_000;
     uint256 public constant MAX_DEPTH = 8;
 
     uint8 internal constant KIND_CHARACTER = 0;
@@ -58,6 +58,16 @@ contract RoyaltyRouterReference is IRoyaltyRouter {
         usdc = usdc_;
         treasury = treasury_;
         owner = owner_;
+        emit OwnershipTransferred(address(0), owner_);
+    }
+
+    /// @notice Owner only. Single step: `newOwner` must be able to send transactions (e.g. the admin Safe).
+    function transferOwnership(address newOwner) external {
+        address current = owner;
+        if (msg.sender != current || current == address(0)) revert Unauthorized(msg.sender);
+        if (newOwner == address(0)) revert ZeroAddress();
+        owner = newOwner;
+        emit OwnershipTransferred(current, newOwner);
     }
 
     function setFactory(address factory_) external {

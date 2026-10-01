@@ -5,6 +5,8 @@ import {LaunchpadFixture} from "./utils/LaunchpadFixture.sol";
 import {BondingCurve} from "../src/BondingCurve.sol";
 import {SeriesCoin} from "../src/SeriesCoin.sol";
 import {SeriesFactory} from "../src/SeriesFactory.sol";
+import {CurveDeployer} from "../src/deployers/CurveDeployer.sol";
+import {CoinDeployer} from "../src/deployers/CoinDeployer.sol";
 import {VestingWallet} from "@openzeppelin/contracts/finance/VestingWallet.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 
@@ -85,10 +87,10 @@ contract SeriesFactoryTest is LaunchpadFixture {
         assertEq(router.parentOf(child), parent);
         address parentAccount = factory.series(parent).characterAccount;
         address childAccount = factory.series(child).characterAccount;
-        _buy(childCurve, makeAddr("reader"), 10e6); // fee 0.1 USDC -> pool 0.02 -> parent 0.01
-        assertEq(usdc.balanceOf(parentAccount), 0.01e6);
-        assertEq(usdc.balanceOf(childAccount), 0.05e6 + 0.01e6);
-        assertEq(router.earned(parentAccount), 0.01e6);
+        _buy(childCurve, makeAddr("reader"), 10e6); // fee 0.15 USDC -> char 0.06, pool 0.03 -> parent 0.015
+        assertEq(usdc.balanceOf(parentAccount), 0.015e6);
+        assertEq(usdc.balanceOf(childAccount), 0.06e6 + 0.015e6);
+        assertEq(router.earned(parentAccount), 0.015e6);
     }
 
     function test_RevertWhen_NotLauncher() public {
@@ -116,5 +118,48 @@ contract SeriesFactoryTest is LaunchpadFixture {
         vm.expectRevert(abi.encodeWithSelector(BondingCurve.InvalidTarget.selector, 50_000e6));
         factory.launch(_params(creator, 0, 50_000e6, 0));
         vm.stopPrank();
+    }
+
+    /// AUDIT.md L-2: launch floors (set per chain at deploy) and the voting-window ceiling.
+    function test_RevertWhen_LaunchOutsideBounds() public {
+        assertEq(factory.minGraduationTarget(), MIN_TARGET);
+        assertEq(factory.minVotingWindow(), MIN_WINDOW);
+        vm.startPrank(relayer);
+        vm.expectRevert(abi.encodeWithSelector(SeriesFactory.TargetTooLow.selector, MIN_TARGET - 1, MIN_TARGET));
+        factory.launch(_params(creator, 0, MIN_TARGET - 1, 0));
+        vm.expectRevert(abi.encodeWithSelector(SeriesFactory.InvalidVotingWindow.selector, MIN_WINDOW - 1));
+        factory.launch(_params(creator, 0, 0, MIN_WINDOW - 1));
+        uint64 tooLong = factory.MAX_VOTING_WINDOW() + 1;
+        vm.expectRevert(abi.encodeWithSelector(SeriesFactory.InvalidVotingWindow.selector, tooLong));
+        factory.launch(_params(creator, 0, 0, tooLong));
+        factory.launch(_params(creator, 0, MIN_TARGET, MIN_WINDOW)); // the floors themselves are allowed
+        factory.launch(_params(creator, 0, 0, factory.MAX_VOTING_WINDOW()));
+        vm.stopPrank();
+    }
+
+    /// Mainnet-style floors (1,000 USDC / 1 h) refuse the testnet demo values (25 USDC / 300 s) and keep defaults.
+    function test_MainnetFloorsRejectDemoValues() public {
+        SeriesFactory mainnetLike = new SeriesFactory(
+            admin, address(usdc), address(math), address(router), address(nft), address(canon), address(graduator),
+            treasury, address(new CurveDeployer()), address(new CoinDeployer()), 1_000e6, 3_600
+        );
+        bytes32 launcher = mainnetLike.LAUNCHER_ROLE();
+        vm.prank(admin);
+        mainnetLike.grantRole(launcher, relayer);
+        vm.startPrank(relayer);
+        vm.expectRevert(abi.encodeWithSelector(SeriesFactory.TargetTooLow.selector, 25e6, 1_000e6));
+        mainnetLike.launch(_params(creator, 0, 25e6, 0));
+        vm.expectRevert(abi.encodeWithSelector(SeriesFactory.InvalidVotingWindow.selector, 300));
+        mainnetLike.launch(_params(creator, 0, 0, 300));
+        vm.stopPrank();
+    }
+
+    function test_RevertWhen_FloorsAboveDefaults() public {
+        address cd = address(new CurveDeployer());
+        address kd = address(new CoinDeployer());
+        vm.expectRevert(SeriesFactory.InvalidBounds.selector);
+        new SeriesFactory(admin, address(usdc), address(math), address(router), address(nft), address(canon), address(graduator), treasury, cd, kd, 5_000e6 + 1, 60);
+        vm.expectRevert(SeriesFactory.InvalidBounds.selector);
+        new SeriesFactory(admin, address(usdc), address(math), address(router), address(nft), address(canon), address(graduator), treasury, cd, kd, 1e6, 86_401);
     }
 }

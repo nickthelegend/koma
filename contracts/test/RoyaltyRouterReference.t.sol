@@ -4,17 +4,17 @@ pragma solidity ^0.8.28;
 import {Test, Vm} from "forge-std/Test.sol";
 import {RoyaltyRouterReference} from "../src/RoyaltyRouterReference.sol";
 import {IRoyaltyRouter} from "../src/interfaces/IRoyaltyRouter.sol";
-import {TestUSDC} from "./utils/TestUSDC.sol";
+import {CircleUSDC, IFiatToken} from "./utils/CircleUSDC.sol";
 
 contract RoyaltyRouterReferenceTest is Test {
     RoyaltyRouterReference router;
-    TestUSDC usdc;
+    IFiatToken usdc;
     address owner = makeAddr("owner");
     address treasury = makeAddr("treasury");
     address factory = makeAddr("factory");
 
     function setUp() public {
-        usdc = new TestUSDC();
+        usdc = CircleUSDC.deploy();
         router = new RoyaltyRouterReference();
         router.initialize(address(usdc), treasury, owner);
         vm.prank(owner);
@@ -39,9 +39,43 @@ contract RoyaltyRouterReferenceTest is Test {
     }
 
     function _route(uint256 id, uint256 amount) internal {
-        usdc.mint(address(router), amount);
+        if (amount != 0) CircleUSDC.mint(address(router), amount); // FiatToken rejects zero mints
         vm.prank(_curve(id));
         router.route(id, amount);
+    }
+
+    /// Ownership hand-over used by the mainnet deploy: deployer initializes as owner, wires, transfers to ADMIN.
+    function test_TransferOwnership() public {
+        address admin = makeAddr("admin");
+        vm.prank(makeAddr("stranger"));
+        vm.expectRevert(abi.encodeWithSelector(RoyaltyRouterReference.Unauthorized.selector, makeAddr("stranger")));
+        router.transferOwnership(admin);
+        vm.startPrank(owner);
+        vm.expectRevert(RoyaltyRouterReference.ZeroAddress.selector);
+        router.transferOwnership(address(0));
+        vm.expectEmit(address(router));
+        emit IRoyaltyRouter.OwnershipTransferred(owner, admin);
+        router.transferOwnership(admin);
+        assertEq(router.owner(), admin);
+        vm.expectRevert(abi.encodeWithSelector(RoyaltyRouterReference.Unauthorized.selector, owner));
+        router.setFactory(owner);
+        vm.expectRevert(abi.encodeWithSelector(RoyaltyRouterReference.Unauthorized.selector, owner));
+        router.transferOwnership(owner);
+        vm.stopPrank();
+        vm.prank(admin);
+        router.setFactory(admin);
+        assertEq(router.factory(), admin);
+        assertEq(router.treasury(), treasury, "treasury cannot change");
+    }
+
+    function test_InitializeEmitsOwnership() public {
+        RoyaltyRouterReference r = new RoyaltyRouterReference();
+        vm.expectEmit(address(r));
+        emit IRoyaltyRouter.OwnershipTransferred(address(0), owner);
+        r.initialize(address(usdc), treasury, owner);
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(RoyaltyRouterReference.Unauthorized.selector, owner));
+        r.initialize(address(usdc), treasury, owner); // deployer-only, once
     }
 
     function test_Initialized() public view {
@@ -100,7 +134,7 @@ contract RoyaltyRouterReferenceTest is Test {
         assertEq(router.curveOf(2), _curve(2));
     }
 
-    function test_NoParentCharacterTakesSeventyPercent() public {
+    function test_NoParentCharacterTakesSixtyPercent() public {
         _chain(1);
         vm.recordLogs();
         _route(1, 10_000);
@@ -111,14 +145,14 @@ contract RoyaltyRouterReferenceTest is Test {
             assertEq(logs[i].topics[0], IRoyaltyRouter.Routed.selector);
             (uint256 amount, uint8 kind) = abi.decode(logs[i].data, (uint256, uint8));
             address to = address(uint160(uint256(logs[i].topics[2])));
-            if (kind == 0) assertEq(abi.encode(to, amount), abi.encode(_account(1), uint256(7_000)));
-            else assertEq(abi.encode(to, amount, kind), abi.encode(treasury, uint256(3_000), uint8(2)));
+            if (kind == 0) assertEq(abi.encode(to, amount), abi.encode(_account(1), uint256(6_000)));
+            else assertEq(abi.encode(to, amount, kind), abi.encode(treasury, uint256(4_000), uint8(2)));
             routed++;
         }
         assertEq(routed, 2);
-        assertEq(usdc.balanceOf(_account(1)), 7_000);
-        assertEq(usdc.balanceOf(treasury), 3_000);
-        assertEq(router.earned(_account(1)), 7_000);
+        assertEq(usdc.balanceOf(_account(1)), 6_000); // 40% + the whole 20% pool
+        assertEq(usdc.balanceOf(treasury), 4_000);
+        assertEq(router.earned(_account(1)), 6_000);
     }
 
     function test_RemixPoolHalvesPerGeneration() public {
@@ -126,15 +160,15 @@ contract RoyaltyRouterReferenceTest is Test {
         _route(3, 10_000); // pool = 2000
         assertEq(usdc.balanceOf(_account(2)), 1_000); // pool >> 1
         assertEq(usdc.balanceOf(_account(1)), 500); // pool >> 2
-        assertEq(usdc.balanceOf(_account(3)), 5_000 + 500);
-        assertEq(usdc.balanceOf(treasury), 3_000);
+        assertEq(usdc.balanceOf(_account(3)), 4_000 + 500);
+        assertEq(usdc.balanceOf(treasury), 4_000);
     }
 
     function test_RemixDepthCappedAtEight() public {
         _chain(10); // series 10 has 9 ancestors
         uint256 amount = 1 << 20;
         _route(10, amount);
-        uint256 pool = amount - amount * 5000 / 10000 - amount * 3000 / 10000;
+        uint256 pool = amount - amount * 4000 / 10000 - amount * 4000 / 10000;
         for (uint256 depth = 1; depth <= 8; depth++) {
             assertEq(usdc.balanceOf(_account(10 - depth)), pool >> depth, "ancestor share");
         }
@@ -144,7 +178,7 @@ contract RoyaltyRouterReferenceTest is Test {
 
     function test_DustGoesToCharacter() public {
         _chain(2);
-        _route(2, 7); // char 3, treasury 2, pool 2 -> parent 1, char +1
+        _route(2, 7); // char 2, treasury 2, pool 3 -> parent 3>>1 = 1, char +2
         assertEq(usdc.balanceOf(_account(2)), 4);
         assertEq(usdc.balanceOf(_account(1)), 1);
         assertEq(usdc.balanceOf(treasury), 2);
@@ -161,6 +195,52 @@ contract RoyaltyRouterReferenceTest is Test {
             total += usdc.balanceOf(_account(i));
         }
         assertEq(total, amount);
-        assertEq(router.earned(treasury), amount * 3000 / 10000);
+        assertEq(router.earned(treasury), amount * 4000 / 10000);
+    }
+
+    function test_SplitConstants() public view {
+        assertEq(router.CHARACTER_BPS(), 4_000);
+        assertEq(router.TREASURY_BPS(), 4_000);
+    }
+
+    /// 40/20/40 split with 0..10 ancestors: every leg matches the formula and the legs sum to `amount`.
+    function test_SplitFortyTwentyFortyAllDepths() public {
+        _chain(11); // series i has i-1 ancestors
+        uint256 amount = 1_234_567; // odd, so rounding dust is exercised
+        for (uint256 id = 1; id <= 11; id++) {
+            _checkSplit(id, amount);
+        }
+    }
+
+    function testFuzz_SplitFortyTwentyFortyAllDepths(uint256 amount, uint8 id) public {
+        _chain(11);
+        _checkSplit(bound(id, 1, 11), bound(amount, 0, 1e30));
+    }
+
+    function _checkSplit(uint256 id, uint256 amount) internal {
+        uint256[12] memory before;
+        for (uint256 i = 1; i <= 11; i++) {
+            before[i] = usdc.balanceOf(_account(i));
+        }
+        uint256 treasuryBefore = usdc.balanceOf(treasury);
+        _route(id, amount);
+
+        uint256 char = amount * 4_000 / 10_000;
+        uint256 tre = amount * 4_000 / 10_000;
+        uint256 pool = amount - char - tre;
+        uint256 ancestorsPaid;
+        uint256 depth = id - 1 > 8 ? 8 : id - 1;
+        for (uint256 d = 1; d <= depth; d++) {
+            assertEq(usdc.balanceOf(_account(id - d)) - before[id - d], pool >> d, "ancestor leg");
+            ancestorsPaid += pool >> d;
+        }
+        for (uint256 d = depth + 1; d < id; d++) {
+            assertEq(usdc.balanceOf(_account(id - d)), before[id - d], "beyond depth 8 gets nothing");
+        }
+        uint256 charPaid = usdc.balanceOf(_account(id)) - before[id];
+        assertEq(charPaid, char + pool - ancestorsPaid, "character leg");
+        assertEq(usdc.balanceOf(treasury) - treasuryBefore, tre, "treasury leg");
+        assertEq(charPaid + tre + ancestorsPaid, amount, "sums exactly");
+        assertEq(usdc.balanceOf(address(router)), 0);
     }
 }

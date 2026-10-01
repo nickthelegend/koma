@@ -12,9 +12,9 @@ import {IBondingCurveView, IGraduatorView} from "./interfaces/ILaunchpad.sol";
 /// @notice Fixed 1B supply: 95% to the bonding curve, 5% to the creator's vesting wallet. Holding is voting:
 ///         every recipient is self-delegated on first receipt, and the clock is `block.timestamp` because
 ///         Arbitrum's `block.number` is the L1 block number.
-/// @dev Until the curve graduates, the coin cannot be sent to the Uniswap v4 PoolManager. Nobody can seed a
-///      v4 pool with it before graduation, which is what lets the Graduator correct the price of a pool that
-///      someone initialized early (a squatted pool can only hold USDC, never coins).
+/// @dev Until the curve graduates, the coin cannot be sent to the Uniswap v4 PoolManager, so no v4 pool (any
+///      fee tier or hook) can trade it before the curve completes. The graduation pool itself is protected by
+///      the Graduator's initialize-gating hook (AUDIT.md H-1); this lock keeps price discovery on the curve.
 contract SeriesCoin is ERC20, ERC20Permit, ERC20Votes {
     address public immutable curve;
     address private immutable _poolManager;

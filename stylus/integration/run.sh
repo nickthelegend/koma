@@ -29,13 +29,12 @@ python3 integration/vectors.py "$RPC" "$MATH" stylus
 python3 integration/vectors.py "$RPC" "$REF" solidity-reference
 
 echo "== router"
-# Ephemeral test keys generated for this run only (factory + one curve per series).
+# Test accounts: the PUBLIC anvil/hardhat test mnemonic (indices 1-6), funded below on this local devnode only.
+# No new private key is generated; these keys are public knowledge and must never hold real funds.
 EPH="$(mktemp)"; chmod 600 "$EPH"
-python3 - "$EPH" <<'PY'
-import json, subprocess, sys
-ks = json.loads(subprocess.check_output(["cast", "wallet", "new", "--number", "6", "--json"]))
-open(sys.argv[1], "w").write("\n".join(k["private_key"] for k in ks))
-PY
+for i in 1 2 3 4 5 6; do
+  cast wallet private-key --mnemonic "test test test test test test test test test test test junk" --mnemonic-index "$i" >> "$EPH"
+done
 key() { sed -n "${1}p" "$EPH"; }
 addr() { cast wallet address --private-key "$(key "$1")"; }
 FACTORY_ADDR="$(addr 1)"; STRANGER="$(addr 6)"
@@ -88,24 +87,40 @@ rc = json.loads(sys.argv[1]); router = sys.argv[2].lower()
 topic = "$(cast keccak 'Routed(uint256,address,uint256,uint8)')"
 got = [(int(l["topics"][1],16), "0x"+l["topics"][2][-40:], int(l["data"][2:66],16), int(l["data"][66:130],16))
        for l in rc["logs"] if l["address"].lower()==router and l["topics"][0]==topic]
-want = [(4,"${ACC[3]}",100000,1),(4,"${ACC[2]}",50000,1),(4,"${ACC[1]}",25000,1),(4,"${ACC[4]}",525000,0),(4,"$TREASURY",300000,2)]
+want = [(4,"${ACC[3]}",100000,1),(4,"${ACC[2]}",50000,1),(4,"${ACC[1]}",25000,1),(4,"${ACC[4]}",425000,0),(4,"$TREASURY",400000,2)]
 assert got == want, (got, want)
 print("PASS: Routed events (order, recipients, amounts, kinds) =", [g[2] for g in got])
 PY
 bal() { cast call -r "$RPC" "$USDC" 'balanceOf(address)(uint256)' "$1" | awk '{print $1}'; }
 earned() { cast call -r "$RPC" "$ROUTER" 'earned(address)(uint256)' "$1" | awk '{print $1}'; }
 check() { [[ "$(bal "$1")" == "$2" && "$(earned "$1")" == "$2" ]] || fail "balance/earned $1: $(bal "$1")/$(earned "$1") != $2"; }
-check "${ACC[4]}" 525000; check "${ACC[3]}" 100000; check "${ACC[2]}" 50000; check "${ACC[1]}" 25000; check "$TREASURY" 300000
+check "${ACC[4]}" 425000; check "${ACC[3]}" 100000; check "${ACC[2]}" 50000; check "${ACC[1]}" 25000; check "$TREASURY" 400000
 [[ "$(bal "$ROUTER")" == $((AMOUNT + 7)) ]] || fail "router kept $(bal "$ROUTER")"
-pass "route(4, 1e6): char 525000 / parent 100000 / grandparent 50000 / great-grandparent 25000 / treasury 300000 (gasUsed $ROUTE_GAS)"
+pass "route(4, 1e6) 40/20/40: char 425000 / parent 100000 / grandparent 50000 / great-grandparent 25000 / treasury 400000 (gasUsed $ROUTE_GAS)"
 
 # second route on the root series with an odd amount: dust goes to the character
 cast send -r "$RPC" --private-key "${CURVE_KEY[1]}" "$ROUTER" 'route(uint256,uint256)' 1 1000007 >/dev/null
-check "${ACC[1]}" $((25000 + 700005)); check "$TREASURY" $((300000 + 300002))
+check "${ACC[1]}" $((25000 + 600005)); check "$TREASURY" $((400000 + 400002))
 [[ "$(bal "$ROUTER")" == 0 ]] || fail "router not empty"
 pass "route(1, 1000007): root takes pool + dust, earned accumulates, router drained to 0"
 
 # transfer failure: route more than the router holds -> token reverts -> route reverts
 reverts "" --private-key "${CURVE_KEY[1]}" "$ROUTER" 'route(uint256,uint256)' 1 5
 pass "route reverts when the USDC transfer fails"
+
+# ownership hand-over (deploy flow: deployer initializes as owner, wires the factory, hands over to ADMIN)
+reverts 0x8e4a23d6 --private-key "$(key 6)" "$ROUTER" 'transferOwnership(address)' "$STRANGER"
+reverts "$(cast sig 'ZeroAddress()')" --private-key "$(cat "$KF")" "$ROUTER" 'transferOwnership(address)' 0x0000000000000000000000000000000000000000
+RC="$(cast send -r "$RPC" --private-key "$(cat "$KF")" "$ROUTER" 'transferOwnership(address)' "$STRANGER" --json)"
+python3 - "$RC" "$ROUTER" "$DEV" "$STRANGER" <<PY
+import json, sys
+rc = json.loads(sys.argv[1]); router, dev, new = (a.lower() for a in sys.argv[2:5])
+topic = "$(cast keccak 'OwnershipTransferred(address,address)')"
+logs = [l for l in rc["logs"] if l["address"].lower() == router and l["topics"][0] == topic]
+assert len(logs) == 1 and logs[0]["topics"][1][-40:] == dev[2:] and logs[0]["topics"][2][-40:] == new[2:], logs
+PY
+[[ "$(cast call -r "$RPC" "$ROUTER" 'owner()(address)')" == "$STRANGER" ]] || fail "owner after transfer"
+reverts 0x8e4a23d6 --private-key "$(cat "$KF")" "$ROUTER" 'setFactory(address)' "$FACTORY_ADDR"
+cast send -r "$RPC" --private-key "$(key 6)" "$ROUTER" 'setFactory(address)' "$FACTORY_ADDR" >/dev/null
+pass "transferOwnership: owner only, non-zero, OwnershipTransferred event, old owner locked out, new owner in control"
 echo "ALL PASS"

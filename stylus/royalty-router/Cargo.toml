@@ -1,6 +1,6 @@
 [package]
 name = "royalty-router"
-description = "KOMA launchpad IRoyaltyRouter: 50/20/30 fee split with halving remix-ancestor shares (Arbitrum Stylus)"
+description = "KOMA launchpad IRoyaltyRouter: 40/20/40 fee split with halving remix-ancestor shares (Arbitrum Stylus)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

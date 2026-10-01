@@ -27,6 +27,9 @@ interface IGraduator {
 /// @dev Gasless flows: `buyWithAuthorization` pulls USDC with the buyer's EIP-3009 signature whose nonce
 ///      commits to `minCoinOut`, `deadline` and a salt; `sellWithPermit` pairs an EIP-2612 coin permit with
 ///      an EIP-712 sell intent. Either way the relayer cannot change the trade's terms.
+///      Fee routing never blocks a trade: if pushing a fee through the royalty router fails (a recipient is
+///      USDC-blacklisted, the router program is not active, ...) the fee stays here in `unroutedFees`, outside
+///      the reserves, and anyone can retry with `flushFees()`. Traders can therefore always exit.
 contract BondingCurve is ReentrancyGuard, EIP712 {
     using SafeERC20 for IERC20;
 
@@ -57,6 +60,8 @@ contract BondingCurve is ReentrancyGuard, EIP712 {
     uint256 public raised;
 
     mapping(address seller => uint256) public sellNonces;
+    /// @notice Fees whose routing failed; held by this contract, never part of the reserves or the pool.
+    uint256 public unroutedFees;
 
     event Trade(
         address indexed trader,
@@ -70,6 +75,9 @@ contract BondingCurve is ReentrancyGuard, EIP712 {
     );
     event Completed(uint256 raised);
     event Graduated(address pool, bytes32 poolId, uint256 usdcToPool, uint256 coinToPool);
+    event FeeRoutingDeferred(uint256 fee);
+    event FeesFlushed(uint256 amount);
+    event SellNonceInvalidated(address indexed seller, uint256 nonce);
 
     error Unauthorized(address caller);
     error CoinAlreadySet();
@@ -86,6 +94,7 @@ contract BondingCurve is ReentrancyGuard, EIP712 {
     error InvalidIntentSignature();
     error InsufficientAllowance(uint256 allowance, uint256 needed);
     error InvalidTarget(uint256 target);
+    error FeeRoutingOutOfGas();
 
     constructor(
         uint256 seriesId_,
@@ -99,10 +108,12 @@ contract BondingCurve is ReentrancyGuard, EIP712 {
         if (usdc_ == address(0) || math_ == address(0) || router_ == address(0) || graduator_ == address(0)) {
             revert ZeroAddress();
         }
-        // The target must be reachable with the coins the curve actually holds.
+        // The target must be reachable with the coins the curve holds, and leave at least
+        // MIN_POOL_COINS unsold: selling every coin would leave nothing to pair at graduation.
         if (
             graduationTarget_ == 0
-                || ICurveMath(math_).quoteBuy(C.VIRTUAL_USDC_0, C.VIRTUAL_COIN_0, graduationTarget_) > C.CURVE_SUPPLY
+                || ICurveMath(math_).quoteBuy(C.VIRTUAL_USDC_0, C.VIRTUAL_COIN_0, graduationTarget_)
+                    > C.CURVE_SUPPLY - C.MIN_POOL_COINS
         ) revert InvalidTarget(graduationTarget_);
         seriesId = seriesId_;
         usdc = IERC20(usdc_);
@@ -315,6 +326,12 @@ contract BondingCurve is ReentrancyGuard, EIP712 {
         if (!SignatureChecker.isValidSignatureNow(seller, digest, intentSig)) revert InvalidIntentSignature();
     }
 
+    /// @notice Cancels the caller's next signed `Sell` intent (the one using `sellNonces(msg.sender)`).
+    function invalidateSellNonce() external {
+        uint256 nonce = sellNonces[msg.sender]++;
+        emit SellNonceInvalidated(msg.sender, nonce);
+    }
+
     function _permitOrAllowance(address seller, uint256 coinIn, uint256 deadline, uint8 v, bytes32 r, bytes32 s)
         private
     {
@@ -362,7 +379,7 @@ contract BondingCurve is ReentrancyGuard, EIP712 {
         graduated = true;
 
         IERC20 coin_ = coin;
-        uint256 usdcAmount = usdc.balanceOf(address(this));
+        uint256 usdcAmount = usdc.balanceOf(address(this)) - unroutedFees;
         uint256 coinAmount = coin_.balanceOf(address(this));
         usdc.safeTransfer(graduator, usdcAmount);
         coin_.safeTransfer(graduator, coinAmount);
@@ -381,13 +398,38 @@ contract BondingCurve is ReentrancyGuard, EIP712 {
         if (complete) revert CurveComplete();
     }
 
+    /// @dev Routes `fee` through the router; if that fails the fee is parked in `unroutedFees` instead of
+    ///      reverting the trade. A deliberately short gas limit cannot be used to force the fallback: an
+    ///      out-of-gas inside the self-call leaves at most 1/64 of the gas, which is detected and reverted.
     function _routeFee(uint256 fee) private {
         if (fee == 0) return;
+        uint256 gasBefore = gasleft();
+        try this.pushFee(fee) {}
+        catch {
+            if (gasleft() <= gasBefore / 63) revert FeeRoutingOutOfGas();
+            unroutedFees += fee;
+            emit FeeRoutingDeferred(fee);
+        }
+    }
+
+    /// @notice Self-call only: the transfer to the router and `route` succeed or revert together.
+    function pushFee(uint256 fee) external {
+        if (msg.sender != address(this)) revert Unauthorized(msg.sender);
         usdc.safeTransfer(address(router), fee);
         router.route(seriesId, fee);
     }
 
-    /// @dev 1% of the USDC side, rounded up (against the trader).
+    /// @notice Anyone: routes the fees whose routing failed earlier. Reverts while routing still fails.
+    function flushFees() external nonReentrant {
+        uint256 amount = unroutedFees;
+        if (amount == 0) revert ZeroAmount();
+        unroutedFees = 0;
+        usdc.safeTransfer(address(router), amount);
+        router.route(seriesId, amount);
+        emit FeesFlushed(amount);
+    }
+
+    /// @dev 1.5% (FEE_BPS) of the USDC side, rounded up (against the trader).
     function _fee(uint256 amount) private pure returns (uint256) {
         return Math.mulDiv(amount, C.FEE_BPS, C.BPS, Math.Rounding.Ceil);
     }

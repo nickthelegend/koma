@@ -22,6 +22,9 @@ fs_permissions = [
   { access = "read", path = "../node_modules/@uniswap" },
   { access = "read-write", path = "../deploy" },
   { access = "read-write", path = "../.data" },
+  { access = "read", path = "../stylus/test-vectors" },
+  # real Tokenbound + Circle USDC runtime code etched by the unit-test fixture
+  { access = "read", path = "./test/utils/bytecode" },
 ]
 
 # Deadlines, the snipe window and canon voting windows are timestamp-based by design.

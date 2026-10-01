@@ -9,6 +9,8 @@ pragma solidity ^0.8.23;
 interface IRoyaltyRouter {
     function initialize(address usdc, address treasury, address owner) external;
 
+    function transferOwnership(address newOwner) external;
+
     function setFactory(address factory) external;
 
     function registerSeries(uint256 seriesId, address curve, address characterAccount, uint256 parentSeriesId) external;

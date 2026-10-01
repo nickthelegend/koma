@@ -1,8 +1,8 @@
 //! KOMA launchpad `IRoyaltyRouter` on Arbitrum Stylus.
 //!
-//! Every curve sends its 1% trading fee here (`usdc.transfer(router, fee)`
+//! Every curve sends its 1.5% trading fee here (`usdc.transfer(router, fee)`
 //! then `router.route(seriesId, fee)`). The router pushes it out immediately:
-//! 50% to the series' character TBA, 30% to the treasury and a 20% remix pool
+//! 40% to the series' character TBA, 40% to the treasury and a 20% remix pool
 //! that walks up the remix tree (parent gets pool/2, grandparent pool/4, ...,
 //! at most 8 levels). Whatever the ancestors don't take (plus rounding dust)
 //! goes to the character, so exactly `amount` is paid out.
@@ -34,6 +34,7 @@ sol_interface! {
 sol! {
     event Routed(uint256 indexed seriesId, address indexed recipient, uint256 amount, uint8 kind);
     event SeriesRegistered(uint256 indexed seriesId, address curve, address characterAccount, uint256 parentSeriesId);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
     // Same errors as contracts/src/RoyaltyRouterReference.sol so revert data
     // is byte-identical in differential tests.
@@ -138,6 +139,16 @@ impl RoyaltyRouter {
         self.vm().emit_log(&buf, 3);
         Ok(())
     }
+
+    /// `owner = new_owner; emit OwnershipTransferred(previous, new_owner)` (LOG3, no data).
+    fn set_owner(&mut self, previous: Address, new_owner: Address) {
+        self.owner_addr.set(new_owner);
+        let mut buf = [0u8; 32 * 3];
+        buf[..32].copy_from_slice(OwnershipTransferred::SIGNATURE_HASH.as_slice());
+        buf[44..64].copy_from_slice(previous.as_slice());
+        buf[76..96].copy_from_slice(new_owner.as_slice());
+        self.vm().emit_log(&buf, 3);
+    }
 }
 
 #[public]
@@ -166,7 +177,23 @@ impl RoyaltyRouter {
         }
         self.usdc_token.set(usdc);
         self.treasury_addr.set(treasury);
-        self.owner_addr.set(owner);
+        self.set_owner(Address::ZERO, owner);
+        Ok(())
+    }
+
+    /// Owner only, single step (`newOwner` must be able to send transactions,
+    /// e.g. the admin Safe). Lets the deployer initialize, wire the factory and
+    /// then hand the router to the admin.
+    pub fn transfer_ownership(&mut self, newOwner: Address) -> Result<(), Vec<u8>> {
+        let sender = self.vm().msg_sender();
+        let owner = self.owner_addr.get();
+        if sender != owner || owner.is_zero() {
+            return Err(unauthorized(sender));
+        }
+        if newOwner.is_zero() {
+            return Err(ZeroAddress::SELECTOR.to_vec());
+        }
+        self.set_owner(owner, newOwner);
         Ok(())
     }
 
