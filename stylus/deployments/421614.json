@@ -1,0 +1,13 @@
+{
+  "chainId": 421614,
+  "curveMath": "0xc4bf7e0587a229ebea208d6d2f15b15faee730e9",
+  "royaltyRouter": "0x658410eddf0eefaf97837d1e47e78693b87fadae",
+  "deployer": "0x83dAD556863b4A4058cccc215a95257453903A04",
+  "initialized": true,
+  "usdc": "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d",
+  "treasury": "0x83dAD556863b4A4058cccc215a95257453903A04",
+  "owner": "0x83dAD556863b4A4058cccc215a95257453903A04",
+  "cacheBidWei": "",
+  "cached": false,
+  "deployedAt": "2026-10-02T14:56:02Z"
+}

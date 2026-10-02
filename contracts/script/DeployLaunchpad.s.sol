@@ -234,9 +234,10 @@ contract DeployLaunchpad is Script {
     function _deploy(Config memory c) internal returns (Deployment memory d) {
         d.stylus = c.math != address(0);
         if (d.stylus) {
+            // Foundry's EVM can't execute Stylus (WASM) programs, so this script never calls them: the
+            // router is initialized by scripts/stylus-deploy.sh and wired with the printed `cast` commands.
             d.curveMath = c.math;
             d.royaltyRouter = c.router;
-            _initRouterIfNeeded(c);
         } else {
             d.curveMath = address(new CurveMathReference());
             RoyaltyRouterReference router = new RoyaltyRouterReference();
@@ -266,7 +267,8 @@ contract DeployLaunchpad is Script {
         graduator.grantRole(graduator.FACTORY_ROLE(), address(factory));
         factory.grantRole(factory.LAUNCHER_ROLE(), c.relayer);
 
-        d.routerWired = _wireRouter(c, d.royaltyRouter, d.seriesFactory);
+        // Stylus router: wired afterwards with `cast` (see the checklist printed below).
+        d.routerWired = d.stylus ? false : _wireRouter(c, d.royaltyRouter, d.seriesFactory);
 
         // Hand every admin role to ADMIN and drop the deployer's.
         if (c.admin != c.deployer) {
@@ -292,15 +294,6 @@ contract DeployLaunchpad is Script {
             c.minGraduationTarget,
             c.minVotingWindow
         );
-    }
-
-    /// @dev Stylus router: `initialize` is deployer-only (tx.origin of the Stylus deploy). If this signer
-    ///      deployed it and it is still blank, initialize it now with this signer as temporary owner.
-    function _initRouterIfNeeded(Config memory c) internal {
-        IRoyaltyRouter r = IRoyaltyRouter(c.router);
-        if (r.usdc() == address(0)) r.initialize(c.usdc, c.treasury, c.deployer);
-        if (r.usdc() != c.usdc) revert RouterMisconfigured("usdc");
-        if (r.treasury() != c.treasury) revert RouterMisconfigured("treasury");
     }
 
     /// @dev Front-run safe ordering: only the owner can point the router at a factory, and the owner hands the
@@ -375,9 +368,11 @@ contract DeployLaunchpad is Script {
         if (uint160(d.graduator) & Hooks.ALL_HOOK_MASK != GRADUATOR_HOOK_FLAGS) revert PostCheck("graduator hook flags");
         CharacterNFT nft = CharacterNFT(d.characterNft);
         if (!nft.hasRole(nft.MINTER_ROLE(), d.seriesFactory)) revert PostCheck("nft minter");
-        IRoyaltyRouter r = IRoyaltyRouter(d.royaltyRouter);
-        if (r.usdc() != c.usdc || r.treasury() != c.treasury) revert PostCheck("router config");
-        if (d.routerWired && (r.factory() != d.seriesFactory || r.owner() != c.admin)) revert PostCheck("router wiring");
+        if (!d.stylus) {
+            IRoyaltyRouter r = IRoyaltyRouter(d.royaltyRouter);
+            if (r.usdc() != c.usdc || r.treasury() != c.treasury) revert PostCheck("router config");
+            if (d.routerWired && (r.factory() != d.seriesFactory || r.owner() != c.admin)) revert PostCheck("router wiring");
+        }
     }
 
     // ------------------------------------------------------------------ helpers
@@ -454,7 +449,14 @@ contract DeployLaunchpad is Script {
 
         console.log("");
         console.log("POST-DEPLOY CHECKLIST (deploy/MAINNET.md has the full runbook)");
-        if (!d.routerWired) {
+        if (d.stylus) {
+            console.log("[ ] Stylus router - send now, as the deployer, in this order (launches revert until done):");
+            console.log(string.concat("    cast send ", vm.toString(d.royaltyRouter), " 'setFactory(address)' ", vm.toString(d.seriesFactory)));
+            if (c.admin != c.deployer) {
+                console.log(string.concat("    cast send ", vm.toString(d.royaltyRouter), " 'transferOwnership(address)' ", vm.toString(c.admin)));
+            }
+            console.log("    then check: cast call <router> 'factory()(address)' / 'owner()(address)' / 'usdc()(address)' / 'treasury()(address)'");
+        } else if (!d.routerWired) {
             console.log("[ ] ADMIN (Safe) must send on the router - launches revert until it does:");
             console.log(string.concat("    ", vm.toString(d.royaltyRouter), " setFactory(address) ", vm.toString(d.seriesFactory)));
         } else {

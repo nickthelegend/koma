@@ -325,3 +325,16 @@ Browser: the app's built-in Chromium (Claude in Chrome was disconnected after a 
 - Repo: `npm run art` pointed at a script that doesn't exist (removed); the economics check moved into `scripts/check-economics.mjs` with npm scripts for every suite; CI workflow added and its web job verified on a clean copy (`npm ci`, typecheck, lint, production build).
 
 **Totals (104 planned items):** 68 PASS (+ the new B15), 3 PARTIAL, 27 UNTESTED (fal locked), 3 BLOCKED (testnet ETH), 3 NOT RE-RUN (live not redeployed). No mocks or stubs in app or contract code; 0 console errors and 0 failed requests on every page tested.
+
+## Results — 2026-10-02, public Arbitrum Sepolia deployment
+
+| ID | Result | Notes |
+|---|---|---|
+| F6 | PASS | Stylus `curve-math` `0xc4bf7e0587a229ebea208d6d2f15b15faee730e9` and `royalty-router` `0x658410eddf0eefaf97837d1e47e78693b87fadae` deployed and activated (ArbWasm program version 3), router initialized with Circle USDC; Solidity suite deployed with `engine: stylus` (`deploy/addresses.421614.json`); router `setFactory` sent; all six Solidity contracts verified on Sourcify (exact match). Cost: 0.00123 ETH of the 0.01 sent. |
+| A4 | PASS (deploy) | Launchpad + KomaIssues on public Arbitrum Sepolia. Pilot series #1 launched on chain (tx `0xd15ef2333cbcd440c48a7452286f746e06381b9df88313eda4539394628a4f88`, 5.38M gas): the factory registered it in the Stylus router (`curveOf(1)` = its curve) and the curve quotes through the Stylus math ($10 → 9,753,923 coins after the 1.5% fee). |
+| E3 | PARTIAL | A paid issue minted on the public testnet still needs fal (locked) and test USDC from faucet.circle.com. |
+
+**FAIL first, fixed:**
+- **Deploy script vs. Stylus.** Foundry's EVM can't execute Stylus (WASM) programs, so `DeployLaunchpad.s.sol` reverted (`OpcodeNotFound`) when it called the router during simulation. On the Stylus path the script now makes no calls into the programs and prints the exact `cast send` wiring commands (`setFactory`, then `transferOwnership` to ADMIN on mainnet). Unit (159) and fork (5) tests still pass.
+- **Stylus deploy gas.** `cargo stylus deploy` underpriced gas as the base fee rose; `scripts/stylus-deploy.sh` now passes `--max-fee-per-gas-gwei` at 2× the current price (Arbitrum charges only the base fee).
+- **RPC choice.** The public `sepolia-rollup.arbitrum.io` RPC refuses Stylus activation simulation ("stylus activations not allowed for this request"); publicnode works, noted in the runbook.

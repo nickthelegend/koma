@@ -210,3 +210,10 @@ The contracts are immutable and have **no pause** (by design; nobody can freeze 
 | Stylus program expired / needs re-activation | `cargo stylus activate` / keepalive (anyone). Deferred router fees are flushed after. |
 | USDC blacklist or pause | Pause: wait (trading halts atomically). Blacklist: fees and treasury payments are parked; flush after it is lifted. |
 | Rehearsal artifacts | Delete `contracts/broadcast/*/42161` and `contracts/cache/*/42161` from any local-fork rehearsal before committing. |
+
+## Notes from the Arbitrum Sepolia deployment (2026-10-02)
+
+- Use an RPC that allows Stylus activation simulation. `sepolia-rollup.arbitrum.io` refuses it ("stylus activations not allowed for this request"); `arbitrum-sepolia-rpc.publicnode.com` works. On Arbitrum One, use your provider's endpoint and run `scripts/stylus-deploy.sh --dry-run` against it first.
+- `DeployLaunchpad.s.sol` never calls the Stylus programs (Foundry's EVM can't run WASM). After it finishes, send the printed `cast send <router> 'setFactory(address)' <factory>` from the deployer, then `transferOwnership(<ADMIN>)`, and check `factory()`, `owner()`, `usdc()`, `treasury()`.
+- Sourcify verification needs no API key: `forge verify-contract --verifier sourcify --chain <id> --rpc-url <rpc> --guess-constructor-args <address> <path>:<Contract>`.
+- Measured on Sepolia: Stylus deploy + activation 0.00059 ETH, Solidity suite 0.00063 ETH, router wiring 0.000004 ETH, one launch 5.38M gas.

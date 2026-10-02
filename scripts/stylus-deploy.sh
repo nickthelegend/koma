@@ -155,7 +155,11 @@ VERIFY_FLAG=(--no-verify); [[ $REPRO == 1 ]] && VERIFY_FLAG=()
 
 deploy() { # deploy <crate> -> prints address; deploy + activate (+ constructor through StylusDeployer)
   local out
-  if ! out="$(cd "$STYLUS/$1" && cargo stylus deploy "${VERIFY_FLAG[@]}" -e "$ENDPOINT" "${STYLUS_SIGNER[@]}" 2>&1 | strip)"; then
+  # cargo-stylus prices gas at the current base fee, which a busy chain can outrun before
+  # inclusion; pay up to 2x the current gas price (Arbitrum charges only the base fee).
+  local max_fee_gwei
+  max_fee_gwei="$(cast gas-price --rpc-url "$ENDPOINT" | awk '{printf "%.6f", $1 * 2 / 1e9}')"
+  if ! out="$(cd "$STYLUS/$1" && cargo stylus deploy "${VERIFY_FLAG[@]}" -e "$ENDPOINT" --max-fee-per-gas-gwei "$max_fee_gwei" "${STYLUS_SIGNER[@]}" 2>&1 | strip)"; then
     echo "$out" | grep -vE "File used for deployment hash" >&2; return 1
   fi
   echo "$out" | grep -E "contract size|data fee|deployment tx hash|activated" | grep -v "We recommend" | sed 's/.*INFO  \[[^]]*\] /  /' >&2

@@ -88,7 +88,7 @@ BUYER_KEY=$(grep ^TEST_AGENT_KEY= .env.local | cut -d= -f2) npm run buy -- "a ve
 | Network | Status | Addresses |
 |---|---|---|
 | KOMA hosted localnet (chain 4216141, behind the live demo) | Live | `deploy/addresses.4216141.json` · KomaIssues `0xB2b1A0E0c4692B792e5E7Db6443EEc0A77658396` |
-| Arbitrum Sepolia (421614) | Ready to deploy (Stylus engine); waiting on testnet ETH for the deployer | — |
+| **Arbitrum Sepolia (421614)** | **Live, Stylus engine**, sources verified on Sourcify (exact match); pilot series #1 launched on chain | [`deploy/addresses.421614.json`](deploy/addresses.421614.json) · Stylus curve math [`0xc4bf…30e9`](https://sepolia.arbiscan.io/address/0xc4bf7e0587a229ebea208d6d2f15b15faee730e9) · Stylus royalty router [`0x6584…adae`](https://sepolia.arbiscan.io/address/0x658410eddf0eefaf97837d1e47e78693b87fadae) · SeriesFactory [`0x9195…8728`](https://sepolia.arbiscan.io/address/0x91956C4C739619b2F5bb5835E23E928a215a8728) · KomaIssues [`0xB23E…0fE3`](https://sepolia.arbiscan.io/address/0xB23E24865d0F6C32af980E8b0af87384A4020fE3) |
 | Arbitrum One (42161) | Prepared, not deployed: runbook, guarded deploy script, preflight, measured cost ≈ 0.00067 ETH | `deploy/MAINNET.md`, `deploy/mainnet-cost.json` |
 
 The live demo runs on the hosted localnet (a persistent Arbitrum Sepolia fork with its own chain id, a filtered public RPC at `/api/rpc` and a 1-test-USDC faucet). It currently serves the build before the 2026-10-01 audit; local is the latest.
