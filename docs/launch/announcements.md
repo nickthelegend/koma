@@ -58,7 +58,7 @@ then you can launch the hero as a character with its own wallet, and holders vot
 - **Launchpad:** each series = Character NFT with an ERC-6551 wallet + a coin on a USDC bonding curve. Gasless trades (signed EIP-3009/EIP-2612 intents relayed by KOMA from $3). 1.5% fee: 40% character wallet / 20% remix tree / 40% treasury.
 - **Arbitrum tech:** curve math and the remix royalty router are Stylus contracts (Rust), differential-tested against Solidity on 10,192 vectors; graduation seeds a locked Uniswap v4 pool.
 - **Canon:** ≥1M-coin holders propose episodes, holders vote with EIP-712 signatures at a snapshot, the keeper finalizes on chain with a votes root.
-- Live: {{link}} · Repo: https://github.com/nickthelegend/koma · Contracts: {{Arbiscan links once deployed}}
+- Live: {{link}} · Repo: https://github.com/nickthelegend/koma · Contracts (Arbitrum Sepolia, verified): https://sepolia.arbiscan.io/address/0x91956C4C739619b2F5bb5835E23E928a215a8728 · Stylus curve math https://sepolia.arbiscan.io/address/0xc4bf7e0587a229ebea208d6d2f15b15faee730e9 {{swap for Arbiscan mainnet links after mainnet}}
 
 Feedback on the Stylus side especially welcome — we measured Stylus slightly cheaper than Solidity for the cached router and more expensive for tiny pure math calls, and wrote both numbers down.
 
@@ -79,7 +79,7 @@ Feedback on the Stylus side especially welcome — we measured Stylus slightly c
 
 **Proof.** 159 Solidity unit/fuzz tests running real Circle USDC and Tokenbound bytecode, 5 fork tests against Arbitrum Sepolia (USDC, Tokenbound, Uniswap v4, character withdrawals, Safe admin), 36 Rust tests, a Stylus-vs-Solidity differential run on a Nitro devnode, a pre-mainnet security audit (`contracts/AUDIT.md`), and end-to-end API and browser test plans with results (`docs/TEST_PLAN.md`).
 
-**Links.** Live: {{link}} · Repo: https://github.com/nickthelegend/koma · Video: {{link}} · Contracts: {{Arbiscan/Sepolia links}}
+**Links.** Live: {{link}} · Repo: https://github.com/nickthelegend/koma · Video: {{link}} · Contracts (Arbitrum Sepolia, verified on Sourcify): SeriesFactory https://sepolia.arbiscan.io/address/0x91956C4C739619b2F5bb5835E23E928a215a8728 · Stylus curve math https://sepolia.arbiscan.io/address/0xc4bf7e0587a229ebea208d6d2f15b15faee730e9 · Stylus royalty router https://sepolia.arbiscan.io/address/0x658410eddf0eefaf97837d1e47e78693b87fadae · full list in `deploy/addresses.421614.json`
 
 **What's next.** Mainnet with a Safe multisig admin, Stylus program caching, sponsored gas via Pimlico, on-chain vote verification.
 
