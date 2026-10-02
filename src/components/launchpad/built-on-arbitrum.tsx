@@ -33,8 +33,8 @@ export function BuiltOnArbitrum({
         </>
       ) : (
         <>
-          This network runs the Solidity reference versions of the curve math and the royalty router. On Arbitrum One and Arbitrum
-          Sepolia the same logic runs as Rust compiled to WebAssembly on Stylus, behind the same interfaces and checked against the
+          This deployment runs the Solidity reference versions of the curve math and the royalty router. KOMA&rsquo;s public
+          deployments run the same logic as Rust compiled to WebAssembly on Stylus, behind the same interfaces and checked against the
           same test vectors. The router splits each {TRADE_FEE_PCT}% fee as it&rsquo;s paid: {FEE_SPLIT.character}% to the character,{" "}
           {FEE_SPLIT.remix}% up the remix tree, {FEE_SPLIT.treasury}% to KOMA.
         </>

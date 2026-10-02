@@ -29,7 +29,7 @@ const gradAbi = parseAbi(["event GraduationFee(uint256 indexed seriesId, uint256
 const results = [];
 const check = (id, name, ok, detail) => { results.push(ok); console.log(`${ok ? "PASS" : "FAIL"} ${id} ${name} — ${detail}`); };
 async function launch(name, parent) {
-  const hash = await relayer.writeContract({ chain: null, address: LP.seriesFactory, abi: factoryAbi, functionName: "launch", args: [{ creator: creator.address, name, symbol: name.slice(0, 4).toUpperCase(), characterName: name, sheetHash: keccak256(stringToBytes(name)), parentSeriesId: BigInt(parent), graduationTarget: U(25), votingWindow: 300n }] });
+  const hash = await relayer.writeContract({ chain: null, address: LP.seriesFactory, abi: factoryAbi, functionName: "launch", args: [{ creator: creator.address, name, symbol: name.replace(/[^A-Za-z0-9]/g, "").slice(0, 4).toUpperCase(), characterName: name, sheetHash: keccak256(stringToBytes(name)), parentSeriesId: BigInt(parent), graduationTarget: U(25), votingWindow: 300n }] });
   const rc = await chain.waitForTransactionReceipt({ hash });
   const [e] = parseEventLogs({ abi: factoryAbi, eventName: "SeriesLaunched", logs: rc.logs });
   for (let i = 0; i < 20 && !(await fetch(`${BASE}/api/series/${e.args.seriesId}`)).ok; i++) await new Promise((r) => setTimeout(r, 1000));
@@ -132,8 +132,14 @@ check("E8", "anti-snipe: one wallet taking >2% of supply in the first 10 minutes
 // Canon: the character owner (browser test wallet) buys first so the snapshot gives it weight, then the relayer proposes an existing minted issue.
 await buy(creator, S.curve, 3);
 const issues = await (await fetch(`${BASE}/api/comics`)).json();
-const pick = issues.comics.map((c) => c.chain.tokenId).sort((x, y) => y - x)[0];
-const canonAbi = parseAbi(["function propose(uint256 seriesId, uint256 issueId, address proposer) returns (uint256)"]);
+const canonAbi = parseAbi(["function propose(uint256 seriesId, uint256 issueId, address proposer) returns (uint256)", "function seriesOfIssue(uint256) view returns (uint256 seriesId, uint256 episode, address proposer)"]);
+// An issue can be proposed only once, ever, so take the newest one no earlier run has used.
+let pick;
+for (const id of issues.comics.map((c) => c.chain.tokenId).sort((x, y) => y - x)) {
+  const [taken] = await chain.readContract({ address: LP.canonRegistry, abi: canonAbi, functionName: "seriesOfIssue", args: [BigInt(id)] });
+  if (taken === 0n) { pick = id; break; }
+}
+if (pick === undefined) throw new Error("E9 needs a minted issue that has never been proposed; make one in the studio first");
 await new Promise((r) => setTimeout(r, 2000));
 const ph = await relayer.writeContract({ chain: null, address: LP.canonRegistry, abi: canonAbi, functionName: "propose", args: [S.seriesId, BigInt(pick), creator.address] });
 const prc = await chain.waitForTransactionReceipt({ hash: ph });

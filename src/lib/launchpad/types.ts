@@ -65,6 +65,8 @@ export type SeriesDetail = SeriesSummary & {
   remixes: { id: number; name: string }[];
   parent: { id: number; name: string } | null;
   royalties: { recipient: Addr; kind: number; amountUsdc: number }[];
+  /** USDC this character's wallet has received from trades in its remixes. */
+  remixRoyaltiesUsdc: number;
   /** Latest block time, so clients count down in chain time. */
   chainTime: number;
 };

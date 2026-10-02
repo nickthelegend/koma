@@ -20,7 +20,7 @@ const ISSUE: Copy = { noun: "issue", after: "drawing starts once it lands", back
  */
 export function PaySheet({ state, onPay, onCancel, copy = ISSUE }: { state: PayState; onPay: () => void; onCancel: () => void; copy?: Copy }) {
   const ref = useRef<HTMLDialogElement>(null);
-  const { address, usdc, connect, connecting, error: walletError, refreshBalance } = useWallet();
+  const { address, usdc, usdcLoaded, connect, connecting, error: walletError, refreshBalance } = useWallet();
   const [faucet, setFaucet] = useState<{ busy: boolean; error?: string }>({ busy: false });
 
   async function claim() {
@@ -44,7 +44,7 @@ export function PaySheet({ state, onPay, onCancel, copy = ISSUE }: { state: PayS
     if (!open && d.open) d.close();
   }, [open]);
 
-  const tooLow = address && q && Number(q.amount) > usdc;
+  const tooLow = address && q && usdcLoaded && Number(q.amount) > usdc;
   const problem = state.quoteError ?? walletError;
 
   return (
@@ -133,7 +133,7 @@ export function PaySheet({ state, onPay, onCancel, copy = ISSUE }: { state: PayS
           )}
           {address && q && (
             <p className="mt-3 text-center text-[12px] text-mute">
-              Paying from <span className="font-mono">{short(address)}</span> · {usdc.toFixed(2)} USDC available
+              Paying from <span className="font-mono">{short(address)}</span> · {usdcLoaded ? usdc.toFixed(2) : "…"} USDC available
             </p>
           )}
         </div>

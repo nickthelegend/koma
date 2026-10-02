@@ -314,7 +314,13 @@ export function Studio({ remix, job, genre: initialGenre, series }: { remix?: Co
               {state.stage === "quoting" ? "Getting quote…" : <>Pay {total} USDC &amp; draw</>}
             </button>
             <p className="mt-3 text-center text-[12px] text-mute">
-              {prompt.trim().length >= 12 ? "About a minute from payment to finished issue." : "Write at least a sentence to continue."}
+              {aiDown
+                ? "Drawing is paused while the AI artist is offline. No payment will be taken."
+                : offline
+                  ? "This server can\u2019t take payments right now."
+                  : prompt.trim().length >= 12
+                    ? "About a minute from payment to finished issue."
+                    : "Write at least a sentence to continue."}
             </p>
           </div>
         </aside>
@@ -326,7 +332,7 @@ export function Studio({ remix, job, genre: initialGenre, series }: { remix?: Co
           <div className="min-w-0 flex-1">
             <p className="font-display text-[24px] leading-none">{total} USDC</p>
             <p className="mt-1 flex items-center gap-1 text-[11.5px] text-mute">
-              <ArbMark width={12} height={12} /> {pages} {pages === 1 ? "page" : "pages"} · no gas
+              <ArbMark width={12} height={12} /> {pages} {pages === 1 ? "page" : "pages"} · {aiDown ? "artist offline" : "no gas"}
             </p>
           </div>
           <button onClick={() => requestQuote(order())} disabled={!ready} className="slant h-12 px-6 text-[19px]">

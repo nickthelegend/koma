@@ -8,6 +8,7 @@ import { ShareButton } from "@/components/share-button";
 import { CoverCard } from "@/components/cover-card";
 import { IconBook, IconRemix, IconBack } from "@/components/icons";
 import { ago, plural, short } from "@/lib/format";
+import { canonStatusOfIssue } from "@/lib/server/launchpad/queries";
 
 export async function generateMetadata({ params }: PageProps<"/c/[id]">): Promise<Metadata> {
   const c = await findComic((await params).id);
@@ -26,6 +27,9 @@ export default async function IssuePage({ params }: PageProps<"/c/[id]">) {
   const comic = await findComic((await params).id);
   if (!comic) notFound();
   const comics = await allComics();
+  // The index knows the episode's fate; an untagged issue can still have been proposed on-chain.
+  const canon = comic.chain?.tokenId ? canonStatusOfIssue(comic.chain.tokenId) : null;
+  const episode = canon ?? (comic.series ? { seriesId: comic.series.id, name: comic.series.name, symbol: comic.series.symbol, episode: 0, status: "voting" as const } : null);
   const more = comics.filter((c) => c.id !== comic.id && c.genre === comic.genre).concat(comics.filter((c) => c.genre !== comic.genre)).slice(0, 4);
 
   return (
@@ -51,12 +55,17 @@ export default async function IssuePage({ params }: PageProps<"/c/[id]">) {
           </div>
 
           <div className="md:pt-20">
-            {comic.series && (
+            {episode && (
               <Link
-                href={`/s/${comic.series.id}`}
-                className="mb-3 inline-flex items-center gap-1.5 bg-kapow px-2 py-1 font-display text-[13px] uppercase tracking-wide text-ink hover:bg-paper"
+                href={`/s/${episode.seriesId}`}
+                className={`mb-3 inline-flex items-center gap-1.5 px-2 py-1 font-display text-[13px] uppercase tracking-wide text-ink hover:bg-paper ${episode.status === "alternate" ? "bg-soft" : "bg-kapow"}`}
               >
-                Episode proposal · {comic.series.name} <span className="font-mono text-[11.5px] normal-case">${comic.series.symbol}</span>
+                {episode.status === "canon"
+                  ? `Canon · episode ${episode.episode} of ${episode.name}`
+                  : episode.status === "alternate"
+                    ? `Alternate universe · ${episode.name}, episode ${episode.episode}`
+                    : `Episode ${episode.episode ? `${episode.episode} ` : ""}proposal · ${episode.name}`}{" "}
+                <span className="font-mono text-[11.5px] normal-case">${episode.symbol}</span>
               </Link>
             )}
             <p className="text-[13px] text-soft">

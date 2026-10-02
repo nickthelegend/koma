@@ -98,6 +98,8 @@ export async function seriesDetail(id: number): Promise<SeriesDetail | null> {
   const royalties = (d.prepare("SELECT recipient, kind, SUM(CAST(amount AS INTEGER)) AS total FROM lp_routed WHERE series_id = ? GROUP BY recipient, kind ORDER BY total DESC").all(id) as {
     recipient: Addr; kind: number; total: number;
   }[]).map((x) => ({ recipient: x.recipient, kind: x.kind, amountUsdc: x.total / 1e6 }));
+  // Royalties this character's wallet received from trades in its remixes (counted in `earned`, not in `royalties`).
+  const fromRemixes = d.prepare("SELECT SUM(CAST(amount AS INTEGER)) AS total FROM lp_routed WHERE lower(recipient) = lower(?) AND series_id != ?").get(r.character_account, id) as { total: number | null };
   return {
     ...summary(r),
     pitch: r.pitch ?? "",
@@ -112,8 +114,24 @@ export async function seriesDetail(id: number): Promise<SeriesDetail | null> {
     remixes,
     parent,
     royalties,
+    remixRoyaltiesUsdc: (fromRemixes.total ?? 0) / 1e6,
     chainTime: await chainNow(),
   };
+}
+
+/** Where a minted issue stands in a series' canon, from the index: still being voted on, canon, or an alternate universe. */
+export function canonStatusOfIssue(tokenId: number): { seriesId: number; name: string; symbol: string; episode: number; status: "voting" | "canon" | "alternate" } | null {
+  const r = db()
+    .prepare(
+      `SELECT p.series_id, p.episode, s.name, s.symbol, sl.finalized, sl.winner FROM lp_proposals p
+       JOIN lp_series s ON s.id = p.series_id
+       LEFT JOIN lp_slots sl ON sl.series_id = p.series_id AND sl.episode = p.episode
+       WHERE p.issue_id = ?`,
+    )
+    .get(tokenId) as { series_id: number; episode: number; name: string; symbol: string; finalized: number | null; winner: number | null } | undefined;
+  if (!r) return null;
+  const status = !r.finalized ? "voting" : r.winner === tokenId ? "canon" : "alternate";
+  return { seriesId: r.series_id, name: r.name, symbol: r.symbol, episode: r.episode, status };
 }
 
 /** Balance of one holder according to the index (for quick UI hints; the chain is authoritative). */

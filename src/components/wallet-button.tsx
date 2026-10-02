@@ -5,7 +5,7 @@ import { ArbMark } from "./icons";
 import { short } from "@/lib/format";
 
 export function WalletButton({ compact = false }: { compact?: boolean }) {
-  const { address, usdc, connecting, connect, disconnect, error } = useWallet();
+  const { address, usdc, usdcLoaded, connecting, connect, disconnect, error } = useWallet();
 
   if (!address) {
     return (
@@ -33,7 +33,7 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
       className="group flex h-9 items-center gap-2 border border-rule bg-stock pl-2 pr-3 text-[13px] hover:border-arb"
     >
       <ArbMark />
-      {!compact && <span className="font-mono text-[12px] text-arb">{usdc.toFixed(2)} USDC</span>}
+      {!compact && <span className="font-mono text-[12px] text-arb">{usdcLoaded ? usdc.toFixed(2) : "…"} USDC</span>}
       <span className="font-mono text-[12px] text-soft group-hover:text-paper">{short(address, 5, 3)}</span>
     </button>
   );

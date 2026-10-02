@@ -272,9 +272,15 @@ export function LaunchStudio({ deployed, parent, job, arbitrum }: { deployed: bo
               <button type="submit" disabled={down || Boolean(offline) || aiDown || state.stage === "quoting"} className="slant w-full py-4 text-[22px] sm:w-auto sm:px-10">
                 {state.stage === "quoting" ? "Getting quote…" : `Pay ${LAUNCH_PRICE.toFixed(2)} USDC & launch`}
               </button>
-              <p className="mt-3 flex items-center gap-1.5 text-[12px] text-mute">
-                <ArbMark width={12} height={12} /> One signature in your wallet · no gas · about a minute to launch
-              </p>
+              {down || offline || aiDown ? (
+                <p className="mt-3 text-[12px] text-kapow">
+                  {aiDown ? "Launching is paused while the AI artist is offline. No payment will be taken." : "Launching is offline on this server right now."}
+                </p>
+              ) : (
+                <p className="mt-3 flex items-center gap-1.5 text-[12px] text-mute">
+                  <ArbMark width={12} height={12} /> One signature in your wallet · no gas · about a minute to launch
+                </p>
+              )}
               {tried && !valid && <p role="alert" className="mt-2 text-[13px] text-kapow">Fix the fields marked above first.</p>}
             </div>
           </form>

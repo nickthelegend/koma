@@ -125,8 +125,9 @@ export function TradeWidget({ s }: { s: TradeSeries }) {
   const busy = ["signing", "sending", "confirming"].includes(phase.step);
   // A buy that fills the curve to its target only spends what the target needs; the rest is refunded.
   const usdcNeeded = side === "buy" && input ? Number(formatUnits(q ? q.used : input, 6)) : 0;
-  const shortUsdc = Boolean(me) && side === "buy" && usdcNeeded > wallet.usdc;
-  const shortCoins = side === "sell" && input !== null && input > coins;
+  const shortUsdc = Boolean(me) && wallet.usdcLoaded && side === "buy" && usdcNeeded > wallet.usdc;
+  // Disconnected wallets hold nothing to sell; a connected one is only short once its balance has loaded.
+  const shortCoins = side === "sell" && input !== null && (me ? coinBal.data !== undefined && input > coins : true);
   const overCap = sniping && side === "buy" && q !== null && coins + q.out > SNIPE_CAP;
   const minOut = q ? withSlippage(q.out, SLIPPAGE_BPS) : BigInt(0);
   const hasGas = (eth.data?.value ?? BigInt(0)) > BigInt(0);
@@ -232,7 +233,7 @@ export function TradeWidget({ s }: { s: TradeSeries }) {
           <span>{side === "buy" ? "You pay (USDC)" : `You sell ($${s.symbol})`}</span>
           {me && (
             <span className="font-mono text-[11.5px]">
-              {side === "buy" ? `${wallet.usdc.toFixed(2)} USDC` : `${coinsFmt(coins)} $${s.symbol}`}
+              {side === "buy" ? `${wallet.usdcLoaded ? wallet.usdc.toFixed(2) : "…"} USDC` : `${coinBal.data !== undefined ? coinsFmt(coins) : "…"} $${s.symbol}`}
             </span>
           )}
         </label>
@@ -275,6 +276,11 @@ export function TradeWidget({ s }: { s: TradeSeries }) {
         <dl className="mt-4 min-h-[88px] border border-rule bg-ink px-3 py-2 text-[12.5px]" aria-live="polite">
           {!input ? (
             <p className="py-5 text-center text-mute">Enter an amount for a live quote from the {pool ? "Uniswap v4 pool" : "curve"}.</p>
+          ) : shortCoins ? (
+            // A curve quote for coins you don't hold is meaningless (it can exceed the USDC the curve holds).
+            <p className="py-5 text-center text-soft">
+              {me ? `You hold ${coinsFmt(coins)} $${s.symbol}. Tap Max to sell all of it.` : `Connect your wallet to sell $${s.symbol}.`}
+            </p>
           ) : q ? (
             <>
               <div className="flex justify-between gap-3 py-0.5">
@@ -419,8 +425,8 @@ function Graduation({ s }: { s: TradeSeries }) {
             <dl className="mt-3 text-[12.5px]">
               {[
                 ["Pool id", short(s.pool.poolId, 10, 6)],
-                ["USDC in pool", usdAmount(s.pool.usdc)],
-                [`$${s.symbol} in pool`, coinAmount(s.pool.coins)],
+                ["USDC seeded at graduation", usdAmount(s.pool.usdc)],
+                [`$${s.symbol} seeded`, coinAmount(s.pool.coins)],
               ].map(([k, v]) => (
                 <div key={k} className="flex justify-between gap-3 border-t border-arb/15 py-2 first:border-t-0">
                   <dt className="text-mute">{k}</dt>

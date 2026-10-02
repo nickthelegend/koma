@@ -39,7 +39,7 @@ function launchpadSteps(stylus: boolean) {
       d: `${compact(TOTAL_SUPPLY)} coins: 95% are sold by a bonding curve that raises the price as people buy and lowers it as they sell; 5% go to the creator, released over 30 days. ${
         stylus
           ? "The curve's math runs in an Arbitrum Stylus contract written in Rust."
-          : `On ${KOMA.label} the curve's math runs as the Solidity reference; on Arbitrum One and Arbitrum Sepolia it runs in an Arbitrum Stylus contract written in Rust.`
+          : "This deployment runs the curve's math as the Solidity reference; KOMA's public deployments run it in an Arbitrum Stylus contract written in Rust."
       }`,
     },
     {

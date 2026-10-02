@@ -272,6 +272,11 @@ export default async function SeriesPage({ params }: PageProps<"/s/[id]">) {
                 })}
               </ul>
             )}
+            {s.remixRoyaltiesUsdc > 0 && (
+              <p className="mt-2 text-[12.5px] text-mute">
+                Plus <span className="font-mono text-soft">{usdAmount(s.remixRoyaltiesUsdc)}</span> to {s.characterName}&rsquo;s wallet from trades in its remixes.
+              </p>
+            )}
           </section>
 
           {/* ——— Remixes ——— */}

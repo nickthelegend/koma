@@ -26,6 +26,11 @@ const LP = status.launchpad?.addresses;
 const USDC = status.usdc;
 
 const results = [];
+// While fal is down nothing can be drawn, so launches and episode proposals are refused before any
+// payment. Those checks are reported UNTESTED; `npm run check:economics` covers trading, fees,
+// remix royalties, anti-snipe and graduation without fal (it launches through SeriesFactory).
+const aiDown = status.ai?.ok === false;
+const untested = [];
 function check(id, name, ok, detail = "") {
   results.push({ id, name, ok });
   console.log(`${ok ? "PASS" : "FAIL"} ${id} ${name}${detail ? ` — ${detail}` : ""}`);
@@ -241,7 +246,13 @@ if (run("L2")) {
 }
 
 // ——— L3 quote ———
-if (run("L3")) {
+if (run("L3") && aiDown) {
+  const res = await postJson("/api/series", launchBody());
+  const body = await res.json().catch(() => ({}));
+  check("L3", "fal down: launch quote refused with 503, no PAYMENT-REQUIRED, says no payment was taken", res.status === 503 && !res.headers.get("PAYMENT-REQUIRED") && /No payment was taken/.test(body.error ?? ""), `${res.status} ${body.error ?? ""}`);
+  for (const id of ["L4", "L5", "L6", "L7", "L8", "L9", "L10", "L11", "L12"].filter(run)) untested.push(id);
+  console.log(`UNTESTED L4–L12 paid launch and everything built on it — fal unavailable (${status.ai.reason}); run \`npm run check:economics\` for trading, fees and graduation without fal`);
+} else if (run("L3")) {
   const res = await postJson("/api/series", launchBody());
   const a = res.status === 402 ? decodePaymentRequiredHeader(res.headers.get("PAYMENT-REQUIRED")).accepts[0] : null;
   check("L3", "launch quote: 402, 1.00 USDC, KOMA network", !!a && a.amount === "1000000" && a.asset.toLowerCase() === USDC.toLowerCase() && a.network === status.caip, a ? `${a.amount} → ${a.payTo}` : `HTTP ${res.status}`);
@@ -258,7 +269,7 @@ async function launch(acct, body) {
 }
 
 // ——— L4 paid launch ———
-if (run("L4") || run("L5") || run("L6") || run("L7") || run("L8") || run("L9") || run("L10") || run("L11") || run("L12")) {
+if (!aiDown && (run("L4") || run("L5") || run("L6") || run("L7") || run("L8") || run("L9") || run("L10") || run("L11") || run("L12"))) {
   const before = await usdc(who.creator.address);
   S = await launch(who.creator, launchBody());
   const [owner, account, supply, curveCoins, vestCoins, code] = await Promise.all([
@@ -383,7 +394,7 @@ if (S && run("L10")) {
 
 // ——— L11 anti-snipe ———
 let G = null;
-if (run("L11") || run("L12")) {
+if (!aiDown && (run("L11") || run("L12"))) {
   G = await launch(who.creator, launchBody({ name: "Graduation Day", symbol: "GRAD", characterName: "Pip Oduya", characterPrompt: "tall graduate student with round glasses, green braids, a patched denim jacket and a pocket full of chalk" }));
   const r = await buy(who.agent, G.curve, U(23));
   check("L11", "anti-snipe: >2% of supply to one wallet in the first 10 minutes is refused", !!r.error, r.error ?? "buy went through");
@@ -422,6 +433,6 @@ if (G && run("L12")) {
 }
 
 const failed = results.filter((r) => !r.ok);
-console.log(`\n${results.length - failed.length}/${results.length} passed${failed.length ? ` — failed: ${failed.map((f) => f.id).join(", ")}` : ""}`);
+console.log(`\n${results.length - failed.length}/${results.length} passed${failed.length ? ` — failed: ${failed.map((f) => f.id).join(", ")}` : ""}${untested.length ? `, ${untested.length} untested (${untested.join(", ")})` : ""}`);
 process.exit(failed.length ? 1 : 0);
 

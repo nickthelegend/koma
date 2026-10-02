@@ -70,7 +70,12 @@ export function EpisodeBanner({ series }: { series: EpisodeSeries }) {
   return (
     <div className="mt-5 flex gap-3 border border-kapow/60 bg-stock p-3 pr-4">
       <div className="relative aspect-[16/9] w-[92px] shrink-0 self-start overflow-hidden bg-stock-2">
-        {detail?.sheetUrl && <Image src={detail.sheetUrl} alt="" fill sizes="92px" className="object-cover" />}
+        {detail?.sheetUrl ? (
+          <Image src={detail.sheetUrl} alt="" fill sizes="92px" className="object-cover" />
+        ) : (
+          // No character sheet (launched without one): a small type plate, never an empty box.
+          detail && <span className="absolute inset-0 grid place-items-center bg-paper font-display text-[15px] uppercase leading-none text-ink">${series.symbol.trim()}</span>
+        )}
       </div>
       <div className="min-w-0 text-[13px] leading-snug text-soft">
         <p className="font-semibold text-paper">

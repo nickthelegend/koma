@@ -338,3 +338,33 @@ Browser: the app's built-in Chromium (Claude in Chrome was disconnected after a 
 - **Deploy script vs. Stylus.** Foundry's EVM can't execute Stylus (WASM) programs, so `DeployLaunchpad.s.sol` reverted (`OpcodeNotFound`) when it called the router during simulation. On the Stylus path the script now makes no calls into the programs and prints the exact `cast send` wiring commands (`setFactory`, then `transferOwnership` to ADMIN on mainnet). Unit (159) and fork (5) tests still pass.
 - **Stylus deploy gas.** `cargo stylus deploy` underpriced gas as the base fee rose; `scripts/stylus-deploy.sh` now passes `--max-fee-per-gas-gwei` at 2× the current price (Arbitrum charges only the base fee).
 - **RPC choice.** The public `sepolia-rollup.arbitrum.io` RPC refuses Stylus activation simulation ("stylus activations not allowed for this request"); publicnode works, noted in the runbook.
+
+## Results — 2026-10-03, run 5 (browser audit on the local fork, signatures only)
+
+Production build (`next build` + `next start`) against the persisted Arbitrum Sepolia fork. Browser items in Claude in Chrome with a test wallet injected as an EIP-1193 provider (it signs; nothing spends real or public-testnet ETH). fal is still locked (`TOP_UP`), so every flow that draws is UNTESTED and was checked to refuse before any payment.
+
+| Area | Result | Notes |
+|---|---|---|
+| H4 gasless buy | PASS | $5 buy: one signature, one relay request even on a double-click, USDC −5.00 exactly, stats/chart/trades refresh on their own. |
+| H5 gasless sell | PASS | Max sell: permit + intent, USDC +7.76 = the quote; tx page decodes fee → router → character / treasury and the payout. |
+| C10 / trade rejection | PASS | Wallet rejection shows "Request cancelled in your wallet." and nothing is sent. |
+| H8 vote in browser | PASS | One free signature at snapshot weight (2.92M), tally + "Your vote" update and survive reload; the keeper finalized on chain when the window closed (`canonOf(15,1) = 27`), canon timeline shows it. |
+| I6 character withdrawal | PASS | Owner withdraws $0.18; wallet shows $0, owner balance +0.18. |
+| E5/H6 graduated pool | PASS | Gasless $3 swap-buy through the Graduator-hooked v4 pool; sell into the pool from the wallet (approve + swap), USDC +7.53 = the quote. |
+| I9 fal down | PASS | Chat composer disabled, form and launch pay buttons disabled with the reason next to them, quotes 503 "No payment was taken". |
+| API edge cases | PASS | 25 malformed requests (non-JSON, unknown kinds, garbage intents, unknown ids, admin RPC methods, no faucet, no paymaster key) all answer with a specific error. |
+| Harnesses | PASS | `test:api` 6/6 (4 need fal), `test:launchpad` 3/3 (L4–L12 need fal), `check:economics` 9/9, eslint clean, `tsc` clean. |
+| C20/H12 sweep | PASS | 106 page loads (53 routes × desktop 1440 and phone 375): 0 console errors, 0 failed requests, 0 horizontal overflow, 0 broken images. The only 404s are the deliberate not-found pages. |
+
+**FAIL first, fixed in this run:**
+- Selling more coins than you hold quoted an impossible payout ($501 from a curve holding $12.78). The widget now says how many you hold instead of quoting.
+- The header and pay sheet showed "0.00 USDC" until the balance loaded (and the trade widget could flash "not enough USDC"); balances now show "…" until read.
+- Character earnings disagreed ($0.29 in the header, $0.28 in "Where the fees went"): royalties from remixes are now listed under the breakdown.
+- `/how` and the "Built on Arbitrum" panel contradicted themselves about which engine runs on Arbitrum Sepolia; both now describe "this deployment" vs "KOMA's public deployments".
+- A canon episode decided with no votes read "0 of 0 votes"; the empty canon text claimed "the first vote decides". Both now say what actually happens.
+- Issue pages always said "Episode proposal", even after the vote; they now show canon / voting / alternate universe from the index (and catch issues proposed on chain without a series tag).
+- Disabled pay buttons (launch, studio, phone bar) gave no reason while fal was down; they now say drawing is paused and no payment will be taken.
+- Episode banner showed an empty box for a series without a character sheet; it now shows a ticker plate.
+- Pool panel labelled graduation-time amounts as live reserves; relabelled "seeded at graduation".
+- `scripts/chain.sh`: a kill during anvil's periodic state save truncated `.data/chain.json`. The script now keeps the last good copy and restores it.
+- Harnesses: `check-economics` E9 reused an already-proposed issue and made tickers with spaces; `e2e-launchpad` crashed when fal was down instead of reporting UNTESTED.

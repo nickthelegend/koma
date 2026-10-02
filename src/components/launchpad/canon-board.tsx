@@ -267,7 +267,7 @@ export function CanonBoard({ seriesId, symbol, characterName, coin, canonRegistr
         {/* ——— Canon so far ——— */}
         <h3 className="mt-9 font-display text-[22px] uppercase leading-none text-paper">Canon so far</h3>
         {view.canon.length === 0 ? (
-          <p className="mt-2 text-[13px] text-mute">No episode is canon yet. The first vote decides episode 1.</p>
+          <p className="mt-2 text-[13px] text-mute">No episode is canon yet. When voting on episode 1 closes, the proposal with the most votes becomes canon.</p>
         ) : (
           <ol className="mt-3 border-l-2 border-kapow">
             {view.canon.map((c) => (
@@ -282,7 +282,7 @@ export function CanonBoard({ seriesId, symbol, characterName, coin, canonRegistr
                   <p className="font-display text-[20px] uppercase text-paper">Issue #{c.issueId}</p>
                 )}
                 <p className="mt-0.5 font-mono text-[11px] text-mute">
-                  {coinAmount(c.winnerVotes)} of {coinAmount(c.totalVotes)} votes{c.votesRoot && ` · votes root ${short(c.votesRoot, 8, 4)}`}
+                  {c.totalVotes > 0 ? `${coinAmount(c.winnerVotes)} of ${coinAmount(c.totalVotes)} votes` : "No votes were cast, so the earliest proposal became canon"}{c.votesRoot && ` · votes root ${short(c.votesRoot, 8, 4)}`}
                 </p>
               </li>
             ))}

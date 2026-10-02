@@ -18,6 +18,8 @@ export const wagmiConfig = createConfig({
 type Wallet = {
   address: `0x${string}` | null;
   usdc: number;
+  /** False until the first balance read lands; `usdc` is 0 until then, so don't treat it as empty. */
+  usdcLoaded: boolean;
   connecting: boolean;
   error: string | null;
   connect: () => Promise<void>;
@@ -82,6 +84,7 @@ function WalletState({ children }: { children: React.ReactNode }) {
     () => ({
       address: address ?? null,
       usdc: balance.data !== undefined ? Number(formatUnits(balance.data, USDC_DECIMALS)) : 0,
+      usdcLoaded: balance.data !== undefined,
       connecting: connectM.isPending,
       error,
       connect,
