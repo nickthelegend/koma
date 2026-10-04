@@ -1,0 +1,114 @@
+[
+ {
+  "id": "intro",
+  "lines": [
+   "This is KOMA.",
+   "An AI comic studio, and a series launchpad, on Arbitrum."
+  ]
+ },
+ {
+  "id": "01-home",
+  "lines": [
+   "You describe a story. KOMA writes it, draws it and letters it in about a minute.",
+   "Ten cents a page in USDC, minted to your wallet on Arbitrum."
+  ]
+ },
+ {
+  "id": "02-studio",
+  "lines": [
+   "Let's make one. I give the editor an idea: a delivery girl racing a thunderstorm across Neo Tokyo.",
+   "It pitches a title, a story, a style, a cast, and a price.",
+   "Paying is one signature. An x402 USDC authorization. No gas, no account.",
+   "KOMA's facilitator settles it on Arbitrum. Then the script is written, the panels are drawn and lettered, live.",
+   "And the issue is minted straight to my wallet."
+  ]
+ },
+ {
+  "id": "03-issue",
+  "lines": [
+   "Every issue is an ERC-721 that stores a hash of its pages and the payment that bought it.",
+   "The payment decodes on-chain, and the receipts ledger shows every settled payment."
+  ]
+ },
+ {
+  "id": "04-reader",
+  "lines": [
+   "Reading is free. Every panel and every balloon comes straight from the model."
+  ]
+ },
+ {
+  "id": "05-how",
+  "lines": [
+   "And because it's plain x402, any AI agent can buy a comic too. One HTTP call, a 402, a signature. Done."
+  ]
+ },
+ {
+  "id": "06-board",
+  "lines": [
+   "Now, the launchpad. Every series is a character, with its own coin.",
+   "The board shows what's trending, what's about to graduate, and a live tape of every launch, trade and canon decision, straight from the chain."
+  ]
+ },
+ {
+  "id": "07-launch",
+  "lines": [
+   "Launching a series costs one dollar. I name it, pick a ticker, and describe the hero.",
+   "One signature, and KOMA draws a character sheet, then launches everything in a single transaction.",
+   "A Character NFT with its own ERC-6551 wallet, and a coin on a USDC bonding curve.",
+   "That sheet keeps the character on model in every episode."
+  ]
+ },
+ {
+  "id": "08-trade",
+  "lines": [
+   "Trading is gasless. A five dollar buy is one USDC signature, and KOMA's relayer pays the gas.",
+   "The signature locks the amount, the minimum out and the deadline, so the relayer can't change them.",
+   "Selling is a permit plus a signed intent.",
+   "Every trade pays one and a half percent. Forty to the character's wallet, twenty up the remix tree, forty to KOMA.",
+   "And forty percent lands in the character's own ERC-6551 wallet, which whoever holds the Character NFT can withdraw."
+  ]
+ },
+ {
+  "id": "09-canon",
+  "lines": [
+   "Holders write the canon. As the character's owner, I propose the next episode, right in the studio.",
+   "It's drawn with the character sheet, so Juniper stays on model, and it's minted and entered as a proposal."
+  ]
+ },
+ {
+  "id": "10-vote",
+  "lines": [
+   "Holders vote for free, with an EIP-712 signature, weighted by what they held when voting opened.",
+   "When the clock runs out, KOMA's keeper writes the winner, and a Merkle root of every vote, to the canon registry on-chain."
+  ]
+ },
+ {
+  "id": "12-graduate",
+  "lines": [
+   "When a curve hits its target, it graduates. The Last Bowl already has.",
+   "KOMA takes five percent, and the keeper moves the rest into a Uniswap v4 pool, locked for good, with KOMA's Graduator as its hook.",
+   "Trading carries on in the pool. Still one signature, still gasless."
+  ]
+ },
+ {
+  "id": "13-remix",
+  "lines": [
+   "Remixes are new series in the same world. Moon Bowl remixes The Last Bowl, and part of every Moon Bowl fee flows back to its parent."
+  ]
+ },
+ {
+  "id": "14-arbitrum",
+  "lines": [
+   "Under the hood, it's all Arbitrum.",
+   "The curve math and the royalty router are Rust contracts on Arbitrum Stylus, live and verified on Arbitrum Sepolia.",
+   "Plus gasless intents, x402 payments, ERC-6551 wallets and Uniswap v4."
+  ]
+ },
+ {
+  "id": "15-close",
+  "lines": [
+   "KOMA. Write it. We draw it.",
+   "Your characters. Your canon. On Arbitrum."
+  ]
+ }
+]

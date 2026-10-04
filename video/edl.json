@@ -1,0 +1,286 @@
+[
+ {
+  "id": "intro",
+  "kind": "card",
+  "min": 6.5,
+  "css": ".card-intro .big{position:absolute;left:150px;top:150px;display:flex;align-items:center;gap:34px}.card-intro .logo{background:var(--kapow);color:#000;font-family:Anton,sans-serif;font-size:260px;line-height:.9;padding:20px 40px 0;box-shadow:16px 16px 0 #000,16px 16px 0 3px var(--paper)}.card-intro .tag{position:absolute;left:150px;top:560px;font-family:Anton,sans-serif;font-size:150px;line-height:.95;text-transform:uppercase;color:var(--paper)}.card-intro .tag span{display:block}.card-intro .chips{position:absolute;left:150px;bottom:150px;display:flex;gap:16px}.card-intro .chip{font-family:'JetBrains Mono',monospace;font-weight:800;font-size:26px;padding:10px 18px;border:3px solid var(--paper);color:var(--paper)}.card-intro .chip.a{background:var(--arb);border-color:var(--arb);color:#000}.card-intro .price{position:absolute;right:170px;top:170px;width:280px;height:280px;background:var(--paper);color:#000;border:6px solid #000;box-shadow:12px 12px 0 var(--kapow);display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Anton,sans-serif}.card-intro .price b{font-size:150px;line-height:.9;font-weight:400}.card-intro .price i{font-style:normal;font-size:34px}",
+  "html": "<div class='halftone'></div><div class='big'><div class='logo' id='in-logo'>KOMA</div></div><div class='price' id='in-price'><b>10\u00a2</b><i>A PAGE</i></div><div class='tag'><span id='in-t1'>Write it.</span><span id='in-t2' style='color:var(--kapow)'>We draw it.</span></div><div class='chips'><div class='chip a' id='in-c1'>ARBITRUM</div><div class='chip' id='in-c2'>x402 USDC</div><div class='chip' id='in-c3'>STYLUS \u00b7 RUST</div><div class='chip' id='in-c4'>ERC-6551</div><div class='chip' id='in-c5'>UNISWAP V4</div></div>",
+  "js": "tl.fromTo('#in-logo',{scale:2.4,rotation:-8,opacity:0},{scale:1,rotation:-2,opacity:1,duration:.55,ease:'expo.out'},$S+0.1);tl.fromTo('#in-price',{y:-500,rotation:18},{y:0,rotation:6,duration:.7,ease:'bounce.out'},$S+0.55);tl.fromTo('#in-t1',{x:-200,opacity:0},{x:0,opacity:1,duration:.45,ease:'power3.out'},$S+0.9);tl.fromTo('#in-t2',{x:-200,opacity:0},{x:0,opacity:1,duration:.45,ease:'power3.out'},$S+1.25);tl.fromTo(['#in-c1','#in-c2','#in-c3','#in-c4','#in-c5'],{y:40,opacity:0},{y:0,opacity:1,duration:.35,stagger:.12,ease:'power3.out'},$S+1.8);tl.to('#in-logo',{scale:1.04,duration:2.5,ease:'sine.inOut'},$S+1);"
+ },
+ {
+  "id": "01-home",
+  "src": "media/raw/01-home.mp4",
+  "n": "01",
+  "chapter": "AI comics, minted",
+  "segs": [
+   [
+    0,
+    32
+   ]
+  ],
+  "callouts": [
+   {
+    "line": 1,
+    "text": "10\u00a2 a page",
+    "sub": "USDC \u00b7 minted to you on Arbitrum",
+    "pos": "tr"
+   }
+  ],
+  "zooms": [
+   {
+    "line": 0,
+    "delay": 0.4,
+    "d": 2.6,
+    "s": 1.18,
+    "x": 30,
+    "y": 70
+   }
+  ]
+ },
+ {
+  "id": "02-studio",
+  "src": "media/raw/02-studio.mp4",
+  "n": "02",
+  "chapter": "Make a comic",
+  "segs": "STUDIO",
+  "callouts": [
+   {
+    "line": 2,
+    "text": "x402 \u00b7 one signature",
+    "sub": "USDC transfer authorization \u00b7 no gas",
+    "pos": "tl"
+   },
+   {
+    "line": 4,
+    "text": "Minted \u00b7 ERC-721",
+    "sub": "hash of the pages + the payment",
+    "pos": "tr",
+    "tone": "arb"
+   }
+  ]
+ },
+ {
+  "id": "03-issue",
+  "src": "media/raw/03-issue.mp4",
+  "n": "03",
+  "chapter": "On-chain proof",
+  "segs": [
+   [
+    0,
+    26
+   ]
+  ],
+  "callouts": [
+   {
+    "line": 1,
+    "text": "Settled on Arbitrum",
+    "sub": "USDC Transfer decoded from the receipt",
+    "pos": "tr",
+    "tone": "arb"
+   }
+  ]
+ },
+ {
+  "id": "04-reader",
+  "src": "media/raw/04-reader.mp4",
+  "segs": [
+   [
+    1,
+    28.5
+   ]
+  ]
+ },
+ {
+  "id": "05-how",
+  "src": "media/raw/05-how.mp4",
+  "n": "04",
+  "chapter": "Agents can buy too",
+  "segs": [
+   [
+    0,
+    21.5
+   ]
+  ],
+  "callouts": [
+   {
+    "line": 0,
+    "delay": 1.2,
+    "text": "HTTP 402",
+    "sub": "POST /api/comics \u2192 pay \u2192 done",
+    "pos": "tr"
+   }
+  ]
+ },
+ {
+  "id": "06-board",
+  "src": "media/raw/06-board.mp4",
+  "n": "05",
+  "chapter": "The series launchpad",
+  "segs": "ALL",
+  "callouts": [
+   {
+    "line": 1,
+    "delay": 1.5,
+    "text": "Live tape",
+    "sub": "launches \u00b7 trades \u00b7 graduations \u00b7 canon",
+    "pos": "bl",
+    "tone": "arb"
+   }
+  ]
+ },
+ {
+  "id": "07-launch",
+  "src": "media/raw/07-launch.mp4",
+  "n": "06",
+  "chapter": "Launch a series \u00b7 $1",
+  "segs": "LAUNCH",
+  "callouts": [
+   {
+    "line": 2,
+    "text": "One transaction",
+    "sub": "Character NFT + ERC-6551 wallet + coin",
+    "pos": "tr"
+   },
+   {
+    "line": 3,
+    "text": "Character sheet",
+    "sub": "reused in every episode",
+    "pos": "bl",
+    "tone": "bam"
+   }
+  ]
+ },
+ {
+  "id": "08-trade",
+  "src": "media/raw/08-trade.mp4",
+  "n": "07",
+  "chapter": "Gasless trading",
+  "segs": "TRADE",
+  "callouts": [
+   {
+    "line": 0,
+    "delay": 1,
+    "text": "One signature \u00b7 no gas",
+    "sub": "EIP-3009 receiveWithAuthorization",
+    "pos": "tl"
+   },
+   {
+    "line": 3,
+    "text": "1.5% fee",
+    "sub": "40 character \u00b7 20 remix tree \u00b7 40 KOMA",
+    "pos": "tl",
+    "tone": "bam"
+   },
+   {
+    "line": 4,
+    "text": "ERC-6551 wallet",
+    "sub": "the character gets paid",
+    "pos": "tr",
+    "tone": "arb"
+   }
+  ]
+ },
+ {
+  "id": "09-canon",
+  "src": "media/raw/09-canon.mp4",
+  "n": "08",
+  "chapter": "Holders write the canon",
+  "segs": "CANON",
+  "callouts": [
+   {
+    "line": 1,
+    "text": "On model",
+    "sub": "drawn with the character sheet",
+    "pos": "tr",
+    "tone": "bam"
+   }
+  ]
+ },
+ {
+  "id": "10-vote",
+  "src": "media/raw/10-vote.mp4",
+  "segs": "VOTE",
+  "callouts": [
+   {
+    "line": 0,
+    "delay": 0.8,
+    "text": "Free vote \u00b7 EIP-712",
+    "sub": "weighted at the snapshot",
+    "pos": "tr"
+   },
+   {
+    "line": 1,
+    "text": "Canon, on-chain",
+    "sub": "winner + Merkle root of every vote",
+    "pos": "tr",
+    "tone": "arb"
+   }
+  ]
+ },
+ {
+  "id": "12-graduate",
+  "src": "media/raw/12-graduate.mp4",
+  "n": "10",
+  "chapter": "Graduation \u2192 Uniswap v4",
+  "segs": "GRAD",
+  "callouts": [
+   {
+    "line": 1,
+    "text": "Uniswap v4 \u00b7 locked",
+    "sub": "5% to KOMA \u00b7 the rest seeds the pool",
+    "pos": "tr",
+    "tone": "arb"
+   }
+  ]
+ },
+ {
+  "id": "13-remix",
+  "src": "media/raw/13-remix.mp4",
+  "n": "11",
+  "chapter": "Remix the world",
+  "segs": "ALL",
+  "callouts": [
+   {
+    "line": 0,
+    "delay": 2,
+    "text": "Royalties flow up",
+    "sub": "half to the parent, a quarter to the grandparent\u2026",
+    "pos": "tr",
+    "tone": "bam"
+   }
+  ]
+ },
+ {
+  "id": "14-arbitrum",
+  "src": "media/raw/14-arbitrum.mp4",
+  "n": "12",
+  "chapter": "Built on Arbitrum",
+  "segs": "ALL",
+  "callouts": [
+   {
+    "line": 1,
+    "text": "Arbitrum Stylus \u00b7 Rust",
+    "sub": "curve math 0xc4bf\u202630e9 \u00b7 router 0x6584\u2026adae",
+    "pos": "tr",
+    "tone": "arb",
+    "d": 5
+   },
+   {
+    "line": 2,
+    "text": "Live on Arbitrum Sepolia",
+    "sub": "Sourcify-verified \u00b7 github.com/nickthelegend/koma",
+    "pos": "bl",
+    "tone": "arb",
+    "d": 4.5
+   }
+  ]
+ },
+ {
+  "id": "15-close",
+  "kind": "card",
+  "min": 7,
+  "css": ".card-15-close .logo{position:absolute;left:50%;top:250px;margin-left:-330px;width:660px;text-align:center;background:var(--kapow);color:#000;font-family:Anton,sans-serif;font-size:220px;line-height:.95;padding:18px 0 0;box-shadow:16px 16px 0 #000,16px 16px 0 3px var(--paper)}.card-15-close .tag{position:absolute;left:0;right:0;top:560px;text-align:center;font-family:Anton,sans-serif;font-size:96px;text-transform:uppercase}.card-15-close .url{position:absolute;left:0;right:0;top:720px;text-align:center;font-family:'JetBrains Mono',monospace;font-weight:800;font-size:34px;color:var(--arb)}",
+  "html": "<div class='halftone'></div><div class='logo' id='out-logo'>KOMA</div><div class='tag' id='out-tag'>Write it. <span style='color:var(--kapow)'>We draw it.</span></div><div class='url' id='out-url'>github.com/nickthelegend/koma \u00b7 Arbitrum</div>",
+  "js": "tl.fromTo('#out-logo',{scale:2,opacity:0,rotation:6},{scale:1,opacity:1,rotation:-2,duration:.55,ease:'expo.out'},$S+0.15);tl.fromTo('#out-tag',{y:60,opacity:0},{y:0,opacity:1,duration:.5,ease:'power3.out'},$S+0.7);tl.fromTo('#out-url',{opacity:0},{opacity:1,duration:.5},$S+1.3);"
+ }
+]
