@@ -34,7 +34,7 @@ abstract contract ForkBase is Test {
             vm.skip(true);
             return;
         }
-        string memory rpc = vm.envOr("FORK_RPC", string("https://arbitrum-sepolia.gateway.tenderly.co"));
+        string memory rpc = vm.envOr("FORK_RPC", vm.envOr("ARBITRUM_SEPOLIA_RPC_URL", string("https://arbitrum-sepolia.gateway.tenderly.co")));
         uint256 blockNumber = vm.envOr("FORK_BLOCK", uint256(0));
         if (blockNumber == 0) vm.createSelectFork(rpc);
         else vm.createSelectFork(rpc, blockNumber);

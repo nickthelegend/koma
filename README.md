@@ -32,6 +32,7 @@ Describe a story and KOMA writes, draws and letters it in about a minute. You pa
 | **ERC-6551** | Each Character NFT owns a Tokenbound AccountV3 that receives its fees. |
 | **Uniswap v4** | Graduation seeds a full-range pool and burns the position; KomaSwapper trades through it. |
 | **Gasless relayer** | EIP-3009 / EIP-2612 / EIP-712 intents submitted by KOMA; optional ERC-7677 sponsorship via Pimlico for wallet-sent trades. |
+| **Alchemy (node provider)** | The server's Arbitrum Sepolia RPC (`KOMA_SERVER_RPC_URL`): relayer, keeper, facilitator settlement, quotes and indexer reads, plus Foundry deploys (`--rpc-url arbitrum_sepolia`), fork tests, Stylus activation and the local fork's upstream. Log scans can use a separate `KOMA_LOGS_RPC_URL` (Alchemy's free tier caps `eth_getLogs` at 10 blocks). The key stays server-side. |
 
 Measured, not assumed (`stylus/bench/results.json`): the cached Stylus router is slightly cheaper than Solidity for a 3-level remix split (131,802 vs 132,890 gas); for tiny pure math calls Stylus's per-call entry cost makes it more expensive (25,992 vs 22,940 gas per cached `quoteBuy`). Mainnet deploys cache both programs (Arbitrum's Stylus CacheManager).
 

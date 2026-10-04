@@ -36,6 +36,8 @@ ignore = ["test/**/*.sol", "script/**/*.sol"]
 runs = 512
 
 [rpc_endpoints]
-arbitrum_sepolia = "https://sepolia-rollup.arbitrum.io/rpc"
+# Alchemy (set ARBITRUM_SEPOLIA_RPC_URL=https://arb-sepolia.g.alchemy.com/v2/<key>); it also allows Stylus activation.
+arbitrum_sepolia = "${ARBITRUM_SEPOLIA_RPC_URL}"
+arbitrum_sepolia_public = "https://sepolia-rollup.arbitrum.io/rpc"
 arbitrum_sepolia_archive = "https://arbitrum-sepolia.gateway.tenderly.co"
 arbitrum = "https://arb1.arbitrum.io/rpc"

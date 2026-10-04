@@ -213,6 +213,7 @@ The contracts are immutable and have **no pause** (by design; nobody can freeze 
 
 ## Notes from the Arbitrum Sepolia deployment (2026-10-02)
 
+- KOMA uses Alchemy as its node provider (`ARBITRUM_SEPOLIA_RPC_URL` / `KOMA_SERVER_RPC_URL`); Alchemy allows Stylus activation simulation. On the free tier `eth_getLogs` is capped at 10 blocks, so set `KOMA_LOGS_RPC_URL` for the indexer.
 - Use an RPC that allows Stylus activation simulation. `sepolia-rollup.arbitrum.io` refuses it ("stylus activations not allowed for this request"); `arbitrum-sepolia-rpc.publicnode.com` works. On Arbitrum One, use your provider's endpoint and run `scripts/stylus-deploy.sh --dry-run` against it first.
 - `DeployLaunchpad.s.sol` never calls the Stylus programs (Foundry's EVM can't run WASM). After it finishes, send the printed `cast send <router> 'setFactory(address)' <factory>` from the deployer, then `transferOwnership(<ADMIN>)`, and check `factory()`, `owner()`, `usdc()`, `treasury()`.
 - Sourcify verification needs no API key: `forge verify-contract --verifier sourcify --chain <id> --rpc-url <rpc> --guess-constructor-args <address> <path>:<Contract>`.

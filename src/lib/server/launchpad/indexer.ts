@@ -1,7 +1,7 @@
 import { parseEventLogs, type Log } from "viem";
 import { canonAbi, coinAbi, curveAbi, factoryAbi, graduatorAbi, routerAbi, swapperAbi } from "@/lib/launchpad/abi";
 import type { Addr } from "@/lib/launchpad/types";
-import { publicClient } from "../config";
+import { logsClient, publicClient } from "../config";
 import { launchpad } from "./addresses";
 import { db, meta, setMeta } from "./db";
 
@@ -218,15 +218,15 @@ export async function indexOnce(): Promise<bigint | null> {
   if (!a) return null;
   followDeployment();
   const key = cursorKey();
-  const head = await publicClient.getBlockNumber();
+  const head = await logsClient.getBlockNumber();
   let from = BigInt(meta(key) ?? a.deployBlock);
   let chunk = CHUNK;
   while (from <= head) {
     const to = from + chunk - BigInt(1) > head ? head : from + chunk - BigInt(1);
     try {
-      const launches = await publicClient.getLogs({ address: a.seriesFactory, fromBlock: from, toBlock: to });
+      const launches = await logsClient.getLogs({ address: a.seriesFactory, fromBlock: from, toBlock: to });
       await apply(launches);
-      const rest = await publicClient.getLogs({ address: watched(), fromBlock: from, toBlock: to });
+      const rest = await logsClient.getLogs({ address: watched(), fromBlock: from, toBlock: to });
       await apply(rest);
     } catch (e) {
       // Some RPCs cap log ranges: shrink and retry.

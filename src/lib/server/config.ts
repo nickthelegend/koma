@@ -32,6 +32,12 @@ export const config = read();
 
 export const publicClient = createPublicClient({ chain: KOMA.chain, transport: http(config.rpcUrl) });
 
+/**
+ * Log scans for the indexer. Defaults to the main RPC; set KOMA_LOGS_RPC_URL when the main provider caps
+ * eth_getLogs ranges (Alchemy's free tier allows 10 blocks), e.g. an archive endpoint for logs only.
+ */
+export const logsClient = process.env.KOMA_LOGS_RPC_URL ? createPublicClient({ chain: KOMA.chain, transport: http(process.env.KOMA_LOGS_RPC_URL) }) : publicClient;
+
 /** Raw JSON-RPC to the chain, for node methods viem has no action for. */
 export async function rpc<T>(method: string, params: unknown[]): Promise<T> {
   const res = await fetch(config.rpcUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
